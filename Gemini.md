@@ -2,20 +2,21 @@
 
 ## Status
 - **Date:** 2026-01-28
-- **Phase:** Phase 4: Complete
-- **Current Task:** Project ready for use.
+- **Phase:** Phase 5: Optimization & Hybrid Support
+- **Current Task:** Maintenance and Documentation.
 
-## Key Requirements
+## Key Accomplishments
 - [x] UI Style: Glassmorphism.
 - [x] Chat History (SQLite).
 - [x] Project Folders.
 - [x] Local LLM (Ollama).
+- [x] Cloud LLM (Gemini 3/2.5/1.5).
+- [x] Fixed Streaming Protocol Issues.
 
 ## Next Steps
 - Run `npm run dev` to start.
-- **UI Style:** Glassmorphism (Dark/Light).
-- **Stack:** Next.js, Tailwind, SQLite, Ollama.
-- **Hardware:** AMD 6650XT (8GB VRAM) - capable of 7B/8B models comfortably.
+- Ensure `.env.local` has a valid `GOOGLE_GENERATIVE_AI_API_KEY`.
+- Enjoy the hybrid AI experience!
 
 ## Documentation
 - [x] Tech Stacks (`TECH_STACKS.md`)

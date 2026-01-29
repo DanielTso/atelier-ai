@@ -1,13 +1,13 @@
 "use client"
 
-import { MessageSquare, Folder, Plus, Settings, Sun, Moon, Send, Loader2, Trash2, ChevronRight, ChevronDown } from "lucide-react"
+import { MessageSquare, Folder, Plus, Settings, Sun, Moon, Send, Loader2, Trash2, AlertCircle } from "lucide-react"
 import { useTheme } from "next-themes"
 import { useChat } from "ai/react"
-import { useEffect, useState, useRef } from "react"
+import { useEffect, useState, useRef, useCallback } from "react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { cn } from "@/lib/utils"
-import { getProjects, createProject, getChats, createChat, getChatMessages, saveMessage, deleteProject, deleteChat } from "./actions"
+import { getProjects, createProject, getChats, createChat, getChatMessages, saveMessage, deleteProject } from "./actions"
 
 interface OllamaModel {
   name: string
@@ -18,12 +18,12 @@ interface OllamaModel {
 // Types matching DB schema roughly
 type Project = { id: number; name: string }
 type Chat = { id: number; projectId: number | null; title: string }
-type DBMessage = { id: number; role: string; content: string }
 
 export default function Home() {
   const { setTheme, theme } = useTheme()
   const [models, setModels] = useState<OllamaModel[]>([])
   const [selectedModel, setSelectedModel] = useState<string>("")
+  const [error, setError] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // Data State
@@ -31,9 +31,8 @@ export default function Home() {
   const [activeProjectId, setActiveProjectId] = useState<number | null>(null)
   const [chats, setChats] = useState<Chat[]>([])
   const [activeChatId, setActiveChatId] = useState<number | null>(null)
-  const [isProjectsExpanded, setIsProjectsExpanded] = useState(true)
 
-  const { messages, input, handleInputChange, handleSubmit, isLoading, setMessages, setInput } = useChat({
+  const { messages, input, handleInputChange, handleSubmit, isLoading, setMessages, error: chatError } = useChat({
     api: "/api/chat",
     body: { model: selectedModel },
     onFinish: async (message) => {
@@ -43,20 +42,84 @@ export default function Home() {
     }
   })
 
+  // Sync chat errors to UI
+  useEffect(() => {
+    if (chatError) {
+      setError(chatError.message)
+    }
+  }, [chatError])
+  
+  // Helper Functions defined with useCallback
+  const fetchModels = useCallback(async () => {
+    try {
+      setError(null)
+      const res = await fetch("/api/models")
+      if (!res.ok) throw new Error("Failed to fetch models")
+      
+      const data = await res.json()
+      if (data.models) setModels(data.models)
+      if (data.models?.length > 0) {
+         setSelectedModel(data.models[0].model)
+      } else {
+         setError("No models found. Ensure Ollama is running.")
+      }
+    } catch (e) { 
+      console.error(e)
+      setError("Failed to load models. Is Ollama running?")
+    }
+  }, [])
+
+  const loadProjects = useCallback(async () => {
+    try {
+      const p = await getProjects()
+      setProjects(p)
+    } catch (e) {
+      console.error(e)
+      setError("Failed to load projects.")
+    }
+  }, [])
+
+  const loadChats = useCallback(async (pid: number) => {
+    try {
+      const c = await getChats(pid)
+      setChats(c)
+    } catch (e) {
+      console.error(e)
+      setError("Failed to load chats.")
+    }
+  }, [])
+
+  const loadMessages = useCallback(async (cid: number) => {
+    try {
+      const msgs = await getChatMessages(cid)
+      // Convert DB messages to AI SDK format
+      setMessages(msgs.map(m => ({
+        id: m.id.toString(),
+        role: m.role as 'user' | 'assistant',
+        content: m.content
+      })))
+    } catch (e) {
+      console.error(e)
+      setError("Failed to load messages.")
+    }
+  }, [setMessages])
+
   // Load Projects on mount
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadProjects()
     fetchModels()
-  }, [])
+  }, [loadProjects, fetchModels])
 
   // Load Chats when Project Changes
   useEffect(() => {
     if (activeProjectId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       loadChats(activeProjectId)
     } else {
       setChats([])
     }
-  }, [activeProjectId])
+  }, [activeProjectId, loadChats])
 
   // Load Messages when Chat Changes
   useEffect(() => {
@@ -65,7 +128,7 @@ export default function Home() {
     } else {
       setMessages([])
     }
-  }, [activeChatId])
+  }, [activeChatId, loadMessages, setMessages])
 
   // Auto-scroll
   useEffect(() => {
@@ -74,41 +137,17 @@ export default function Home() {
     }
   }, [messages])
 
-  const fetchModels = async () => {
-    try {
-      const res = await fetch("/api/models")
-      const data = await res.json()
-      if (data.models) setModels(data.models)
-      if (data.models?.length > 0) setSelectedModel(data.models[0].name)
-    } catch (e) { console.error(e) }
-  }
-
-  const loadProjects = async () => {
-    const p = await getProjects()
-    setProjects(p)
-  }
-
-  const loadChats = async (pid: number) => {
-    const c = await getChats(pid)
-    setChats(c)
-  }
-
-  const loadMessages = async (cid: number) => {
-    const msgs = await getChatMessages(cid)
-    // Convert DB messages to AI SDK format
-    setMessages(msgs.map(m => ({
-      id: m.id.toString(),
-      role: m.role as 'user' | 'assistant',
-      content: m.content
-    })))
-  }
-
   const handleCreateProject = async () => {
     const name = prompt("Project Name:")
     if (!name) return
-    const [newP] = await createProject(name)
-    setProjects([...projects, newP])
-    setActiveProjectId(newP.id)
+    try {
+      const [newP] = await createProject(name)
+      setProjects([...projects, newP])
+      setActiveProjectId(newP.id)
+    } catch (e) {
+      console.error(e)
+      setError("Failed to create project.")
+    }
   }
 
   const handleCreateChat = async () => {
@@ -116,18 +155,29 @@ export default function Home() {
       alert("Select a project first")
       return
     }
-    const [newC] = await createChat(activeProjectId, "New Chat")
-    setChats([newC, ...chats])
-    setActiveChatId(newC.id)
+    try {
+      const [newC] = await createChat(activeProjectId, "New Chat")
+      setChats([newC, ...chats])
+      setActiveChatId(newC.id)
+    } catch (e) {
+      console.error(e)
+      setError("Failed to create chat.")
+    }
   }
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!activeChatId) return
+    setError(null)
     
-    // Save user message immediately
-    await saveMessage(activeChatId, 'user', input)
-    handleSubmit(e)
+    try {
+      // Save user message immediately
+      await saveMessage(activeChatId, 'user', input)
+      handleSubmit(e)
+    } catch (e) {
+      console.error(e)
+      setError("Failed to send message.")
+    }
   }
 
   return (
@@ -236,13 +286,24 @@ export default function Home() {
              >
                {models.length === 0 && <option>Loading...</option>}
                {models.map((m) => (
-                 <option key={m.digest} value={m.name}>
+                 <option key={m.digest} value={m.model}>
                    {m.name}
                  </option>
                ))}
              </select>
           </div>
         </header>
+
+        {/* Error Banner */}
+        {error && (
+          <div className="bg-red-500/10 border-b border-red-500/20 px-6 py-2 flex items-center gap-2 text-sm text-red-400">
+            <AlertCircle className="h-4 w-4" />
+            <span>{error}</span>
+            <button onClick={() => setError(null)} className="ml-auto hover:text-red-300">
+              Dismiss
+            </button>
+          </div>
+        )}
 
         {/* Messages */}
         <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-6">
@@ -276,8 +337,8 @@ export default function Home() {
                           <ReactMarkdown 
                             remarkPlugins={[remarkGfm]}
                             components={{
-                              pre: ({node, ...props}) => <pre className="overflow-auto w-full my-2 bg-black/50 p-2 rounded-lg" {...props} />,
-                              code: ({node, ...props}) => <code className="bg-black/30 rounded px-1" {...props} />
+                              pre: ({...props}) => <pre className="overflow-auto w-full my-2 bg-black/50 p-2 rounded-lg" {...props} />,
+                              code: ({...props}) => <code className="bg-black/30 rounded px-1" {...props} />
                             }}
                           >
                             {m.content}

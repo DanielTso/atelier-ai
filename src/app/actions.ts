@@ -29,7 +29,6 @@ export async function deleteChat(id: number) {
 }
 
 export async function saveMessage(chatId: number, role: string, content: string) {
-  // @ts-ignore - simple type bypass for 'role' string vs literal matching
   return await db.insert(messages).values({ chatId, role, content }).returning()
 }
 

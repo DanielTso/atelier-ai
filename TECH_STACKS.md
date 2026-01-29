@@ -1,22 +1,26 @@
-# Tech Stack Suggestions for Local Chat UI with Ollama
+# Implemented Tech Stack
 
-## Option 1: Modern SPA (Single Page Application)
-*   **Frontend:** React (created via Vite) + TypeScript
-*   **Styling:** Tailwind CSS + Shadcn/ui (for accessible, pre-built components)
-*   **State Management:** Zustand or React Context
-*   **Backend:** None (Direct browser-to-Ollama communication if CORS permits) or a lightweight Node.js/Express proxy.
-*   **Pros:** Fast development, standard industry stack, highly customizable UI.
-*   **Cons:** Requires handling client-side state logic for streaming.
+This document outlines the final technology choices used in the "Glassmorphic Local AI Chat" application.
 
-## Option 2: Full-Stack React Framework
-*   **Framework:** Next.js (App Router) + TypeScript
-*   **Styling:** Tailwind CSS
-*   **Backend:** Next.js API Routes (serverless functions) to proxy requests to Ollama.
-*   **Pros:** Unified project structure, server-side rendering benefits (if needed), easy API proxy setup to avoid CORS issues.
-*   **Cons:** Slightly higher learning curve if unfamiliar with Server Components.
+## Core Framework
+*   **Next.js 16 (App Router):** Chosen for its robust server-side rendering, API route capabilities, and seamless integration with Vercel AI SDK.
+*   **TypeScript:** Used throughout for type safety and developer productivity.
 
-## Option 3: Python-Centric (FastAPI + React)
-*   **Frontend:** React + TypeScript + Tailwind CSS
-*   **Backend:** FastAPI (Python)
-*   **Pros:** Great if you plan to integrate advanced Python AI libraries (LangChain, LlamaIndex) later. FastAPI handles async streaming well.
-*   **Cons:** Two separate codebases/servers to manage (Frontend and Backend).
+## User Interface (UI)
+*   **Tailwind CSS v4:** For utility-first styling and easy implementation of the "Glassmorphism" aesthetic.
+*   **Lucide React:** For lightweight, consistent iconography.
+*   **Next-Themes:** For reliable Dark/Light mode switching.
+*   **React Markdown:** To render AI responses with proper formatting (code blocks, bold text, etc.).
+
+## AI & Streaming
+*   **Vercel AI SDK (v3.4):** A powerful library for handling streaming responses from LLMs. We specifically chose v3.4 for stability and compatibility.
+*   **Ollama AI Provider:** For connecting to locally hosted models (Llama 3, Mistral, etc.) via `ollama-ai-provider`.
+*   **Google Generative AI SDK:** For integrating Gemini cloud models (Gemini 3, Gemini 2.5, Gemini 1.5).
+
+## Data Persistence
+*   **SQLite (better-sqlite3):** A high-performance, serverless SQL database perfect for local, private data storage.
+*   **Drizzle ORM:** A lightweight, type-safe ORM for interacting with the SQLite database.
+
+## Deployment / Runtime
+*   **Node.js:** The runtime environment.
+*   **Localhost:** Primarily designed to run locally on the user's machine to ensure data privacy and access to local Ollama instances.
