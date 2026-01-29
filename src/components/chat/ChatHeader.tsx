@@ -1,9 +1,9 @@
 "use client"
 
 import { memo, useState, useRef, useEffect } from "react"
-import { MessageSquare, Edit2, Check, X, Bot } from "lucide-react"
+import { MessageSquare, Edit2, Check, X } from "lucide-react"
 import { ModelSelect } from "@/components/ui/ModelSelect"
-import { cn } from "@/lib/utils"
+import { PersonaSelector } from "@/components/ui/PersonaSelector"
 
 interface Model {
   name: string
@@ -19,6 +19,7 @@ interface ChatHeaderProps {
   systemPrompt: string | null
   onModelChange: (model: string) => void
   onTitleChange?: (id: number, title: string) => void
+  onSystemPromptChange?: (prompt: string | null) => void
   onSystemPromptClick?: () => void
 }
 
@@ -30,6 +31,7 @@ export const ChatHeader = memo(function ChatHeader({
   systemPrompt,
   onModelChange,
   onTitleChange,
+  onSystemPromptChange,
   onSystemPromptClick,
 }: ChatHeaderProps) {
   const [isEditing, setIsEditing] = useState(false)
@@ -117,25 +119,13 @@ export const ChatHeader = memo(function ChatHeader({
         )}
       </div>
       <div className="flex items-center gap-3">
-        {chatId && onSystemPromptClick && (
-          <button
-            onClick={onSystemPromptClick}
-            className={cn(
-              "flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs transition-colors",
-              systemPrompt
-                ? "bg-primary/20 text-primary hover:bg-primary/30"
-                : "text-muted-foreground hover:bg-white/10 hover:text-foreground"
-            )}
-            title={systemPrompt ? "Edit system instruction" : "Add system instruction"}
-          >
-            <Bot className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">
-              {systemPrompt ? "Instruction" : "Add Instruction"}
-            </span>
-            {systemPrompt && (
-              <span className="w-1.5 h-1.5 rounded-full bg-primary" />
-            )}
-          </button>
+        {chatId && onSystemPromptChange && (
+          <PersonaSelector
+            currentPrompt={systemPrompt}
+            onSelect={onSystemPromptChange}
+            onCustomize={onSystemPromptClick}
+            disabled={!chatId}
+          />
         )}
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground">Model:</span>

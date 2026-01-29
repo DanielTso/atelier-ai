@@ -92,11 +92,19 @@ export const MessagesList = memo(function MessagesList({
   // In a real app, you'd pass createdAt from the message
   const now = new Date()
 
+  // Find the last assistant message for streaming cursor
+  const lastAssistantIndex = messages.reduce((lastIdx, m, idx) =>
+    m.role === 'assistant' ? idx : lastIdx, -1)
+
   return (
     <Tooltip.Provider delayDuration={300}>
       <div className="flex flex-col gap-6 max-w-3xl mx-auto pb-4">
         <AnimatePresence initial={false}>
-          {messages.map((m) => (
+          {messages.map((m, index) => {
+            // Show streaming cursor on last assistant message while loading
+            const isStreamingMessage = isLoading && m.role === 'assistant' && index === lastAssistantIndex
+
+            return (
             <motion.div
               key={m.id}
               variants={messageVariants}
@@ -125,7 +133,10 @@ export const MessagesList = memo(function MessagesList({
                     ? "bg-primary/20 border-primary/10 rounded-tr-none"
                     : "bg-white/5 border-white/10 rounded-tl-none"
                 )}>
-                  <div className="prose dark:prose-invert text-base max-w-none break-words">
+                  <div className={cn(
+                    "prose dark:prose-invert text-base max-w-none break-words",
+                    isStreamingMessage && "streaming-cursor"
+                  )}>
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm]}
                       components={MARKDOWN_COMPONENTS}
@@ -165,7 +176,7 @@ export const MessagesList = memo(function MessagesList({
                 </div>
               </div>
             </motion.div>
-          ))}
+          )})}
         </AnimatePresence>
 
         {/* Typing Indicator */}

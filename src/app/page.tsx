@@ -524,6 +524,7 @@ export default function Home() {
           systemPrompt={currentSystemPrompt}
           onModelChange={setSelectedModel}
           onTitleChange={handleUpdateChatTitle}
+          onSystemPromptChange={handleSaveSystemPrompt}
           onSystemPromptClick={() => setSystemPromptDialogOpen(true)}
         />
 
