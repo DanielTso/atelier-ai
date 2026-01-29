@@ -1,51 +1,45 @@
-import { createOllama } from 'ollama-ai-provider';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { createOllama } from 'ai-sdk-ollama';
 import { streamText } from 'ai';
 
-const ollama = createOllama();
+// Create singleton provider instances at module level for better performance
+const google = process.env.GOOGLE_GENERATIVE_AI_API_KEY
+  ? createGoogleGenerativeAI({
+      apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
+    })
+  : null;
 
-// Create the Google provider instance dynamically to ensure it picks up the latest env var
-const createGoogleProvider = () => {
-  const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-  if (!apiKey) {
-    console.warn("⚠️ GOOGLE_GENERATIVE_AI_API_KEY is missing from environment variables.");
-  }
-  return createGoogleGenerativeAI({
-    apiKey: apiKey || '',
-  });
-};
+const ollama = createOllama({
+  baseURL: 'http://localhost:11434',
+});
 
 export async function POST(req: Request) {
   try {
     const { messages, model } = await req.json();
-    const modelName = model || 'llama3:latest';
+    const modelName = model || 'gemini-3-flash-preview';
 
     console.log(`[API] Request for model: ${modelName}`);
 
-    let modelProvider;
+    // Determine which provider to use based on model name
+    const isGeminiModel = modelName.startsWith('gemini');
 
-    if (modelName.startsWith('gemini')) {
-      const google = createGoogleProvider();
-      // Check if key is actually present when a gemini model is requested
-      if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
+    let selectedModel;
+    if (isGeminiModel) {
+      if (!google) {
         throw new Error("Google Gemini API Key is missing. Please check your .env.local file.");
       }
-      modelProvider = google(modelName);
+      selectedModel = google(modelName);
     } else {
-      modelProvider = ollama(modelName);
+      // Ollama model
+      selectedModel = ollama(modelName);
     }
 
-    const result = await streamText({
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      model: modelProvider as any,
+    const result = streamText({
+      model: selectedModel,
       messages,
-      onFinish: (completion) => {
-        // Optional: Log token usage or success here if needed
-        // console.log("Stream finished");
-      }
     });
 
-    return result.toDataStreamResponse();
+    return result.toTextStreamResponse();
 
   } catch (error) {
     console.error("❌ [API Error]:", error);

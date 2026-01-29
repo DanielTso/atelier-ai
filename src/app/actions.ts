@@ -28,10 +28,24 @@ export async function deleteChat(id: number) {
   return await db.delete(chats).where(eq(chats.id, id))
 }
 
+export async function updateChatTitle(id: number, title: string) {
+  return await db.update(chats).set({ title }).where(eq(chats.id, id)).returning()
+}
+
 export async function saveMessage(chatId: number, role: string, content: string) {
   return await db.insert(messages).values({ chatId, role, content }).returning()
 }
 
-export async function getChatMessages(chatId: number) {
-  return await db.select().from(messages).where(eq(messages.chatId, chatId)).all()
+export async function getChatMessages(chatId: number, limit: number = 100) {
+  // Limit messages to improve performance on large chats
+  // Load most recent messages by ordering by createdAt DESC and limiting, then reverse
+  const recentMessages = await db.select()
+    .from(messages)
+    .where(eq(messages.chatId, chatId))
+    .orderBy(desc(messages.createdAt))
+    .limit(limit)
+    .all()
+
+  // Reverse to get chronological order (oldest first)
+  return recentMessages.reverse()
 }

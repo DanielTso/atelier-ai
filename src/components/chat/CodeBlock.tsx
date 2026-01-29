@@ -1,0 +1,58 @@
+"use client"
+
+import { useState } from "react"
+import { Check, Copy } from "lucide-react"
+
+interface CodeBlockProps {
+  children: React.ReactNode
+  className?: string
+}
+
+export function CodeBlock({ children, className }: CodeBlockProps) {
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = async () => {
+    const codeElement = document.querySelector('pre code')
+    const code = codeElement?.textContent || ''
+
+    try {
+      await navigator.clipboard.writeText(code)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch (err) {
+      console.error('Failed to copy code:', err)
+    }
+  }
+
+  return (
+    <div className="relative group">
+      <button
+        onClick={handleCopy}
+        className="absolute right-2 top-2 p-1.5 rounded-lg bg-white/10 hover:bg-white/20 opacity-0 group-hover:opacity-100 transition-all duration-200 z-10"
+        title={copied ? "Copied!" : "Copy code"}
+      >
+        {copied ? (
+          <Check className="h-4 w-4 text-green-400" />
+        ) : (
+          <Copy className="h-4 w-4 text-white/70" />
+        )}
+      </button>
+      <pre className={className}>
+        {children}
+      </pre>
+    </div>
+  )
+}
+
+interface InlineCodeProps {
+  children?: React.ReactNode
+  className?: string
+}
+
+export function InlineCode({ children, className, ...props }: InlineCodeProps & React.HTMLAttributes<HTMLElement>) {
+  return (
+    <code className={`bg-black/30 rounded px-1 py-0.5 text-sm font-mono ${className || ''}`} {...props}>
+      {children}
+    </code>
+  )
+}
