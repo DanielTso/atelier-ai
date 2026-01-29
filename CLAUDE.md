@@ -59,8 +59,69 @@ In `src/app/api/chat/route.ts`:
 
 ### Key Dependencies
 
-- **Vercel AI SDK** (`ai`, `@ai-sdk/react`, `@ai-sdk/google`) - Streaming chat
+- **Vercel AI SDK v6** (`ai@^6.0`, `@ai-sdk/react@^3.0`) - Streaming chat
 - **ai-sdk-ollama** - Ollama integration
 - **Drizzle ORM** - Type-safe database queries
 - **react-markdown** + **remark-gfm** - Markdown rendering
 - **next-themes** - Dark/light mode
+
+## AI SDK v6 Implementation Details
+
+### Client-Side (`useChat` hook)
+
+The SDK v6 uses a different API than earlier versions:
+
+```typescript
+// Transport handles API communication
+const transport = useMemo(() => new DefaultChatTransport({
+  api: '/api/chat',
+  body: () => ({ model: selectedModelRef.current }), // Use ref to avoid stale closure
+}), [])
+
+const { messages, sendMessage, status, setMessages } = useChat({ transport })
+```
+
+**Key differences from older SDK:**
+- No `input`, `handleInputChange`, `handleSubmit` - manage input state yourself
+- No `isLoading` - use `status === 'streaming' || status === 'submitted'`
+- Messages use `parts` array instead of `content` string
+- Use `sendMessage({ text: input })` to send messages
+
+### Server-Side (`/api/chat`)
+
+```typescript
+import { streamText, convertToModelMessages, type UIMessage } from 'ai';
+
+// Client sends UIMessage format, streamText needs ModelMessage format
+const modelMessages = await convertToModelMessages(messages as UIMessage[]);
+
+const result = streamText({
+  model: selectedModel,
+  messages: modelMessages,
+});
+
+// Use toUIMessageStreamResponse() for new SDK client
+return result.toUIMessageStreamResponse();
+```
+
+### Message Format
+
+**UIMessage (client-side):**
+```typescript
+{ id: string, role: 'user' | 'assistant', parts: [{ type: 'text', text: string }] }
+```
+
+**Extract text from UIMessage:**
+```typescript
+const text = message.parts
+  .filter((part): part is { type: 'text'; text: string } => part.type === 'text')
+  .map(part => part.text)
+  .join('');
+```
+
+### Common Gotchas
+
+1. **Stale closure in transport body**: Use a `ref` for dynamic values like selected model
+2. **Message format mismatch**: Use `convertToModelMessages()` on the server
+3. **Response format**: Use `toUIMessageStreamResponse()` not `toTextStreamResponse()`
+4. **Ollama provider**: Use `baseURL` (not `baseUrl`) in `createOllama()`
