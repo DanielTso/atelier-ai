@@ -5,10 +5,13 @@ import { useTheme } from "next-themes"
 import { useChat } from "@ai-sdk/react"
 import { DefaultChatTransport } from "ai"
 import { useEffect, useState, useRef, useCallback, useMemo } from "react"
-import { getProjects, createProject, getChats, createChat, getChatMessages, saveMessage, deleteProject, updateChatTitle } from "./actions"
+import TextareaAutosize from "react-textarea-autosize"
+import { toast } from "sonner"
+import { getProjects, createProject, getChats, createChat, getChatMessages, saveMessage, deleteProject, updateChatTitle, getStandaloneChats, createStandaloneChat, deleteChat } from "./actions"
 import { Sidebar } from "@/components/chat/Sidebar"
 import { ChatHeader } from "@/components/chat/ChatHeader"
 import { MessagesList } from "@/components/chat/MessagesList"
+import { CommandPalette } from "@/components/ui/CommandPalette"
 
 interface Model {
   name: string
@@ -27,6 +30,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null)
   const [input, setInput] = useState("")
   const scrollRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   // Use ref to always get current model in transport body function
   const selectedModelRef = useRef(selectedModel)
@@ -36,7 +40,11 @@ export default function Home() {
   const [projects, setProjects] = useState<Project[]>([])
   const [activeProjectId, setActiveProjectId] = useState<number | null>(null)
   const [chats, setChats] = useState<Chat[]>([])
+  const [standaloneChats, setStandaloneChats] = useState<Chat[]>([])
   const [activeChatId, setActiveChatId] = useState<number | null>(null)
+
+  // Command palette state
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
 
   // Create transport with body as function to always get current model
   const transport = useMemo(() => new DefaultChatTransport({
@@ -121,6 +129,16 @@ export default function Home() {
     }
   }, [])
 
+  const loadStandaloneChats = useCallback(async () => {
+    try {
+      const c = await getStandaloneChats()
+      setStandaloneChats(c)
+    } catch (e) {
+      console.error(e)
+      setError("Failed to load chats.")
+    }
+  }, [])
+
   const loadChats = useCallback(async (pid: number) => {
     try {
       const c = await getChats(pid)
@@ -146,11 +164,12 @@ export default function Home() {
     }
   }, [setMessages])
 
-  // Load Projects on mount
+  // Load Projects and standalone chats on mount
   useEffect(() => {
     loadProjects()
+    loadStandaloneChats()
     fetchModels()
-  }, [loadProjects, fetchModels])
+  }, [loadProjects, loadStandaloneChats, fetchModels])
 
   // Load Chats when Project Changes
   useEffect(() => {
@@ -183,6 +202,18 @@ export default function Home() {
     return () => cancelAnimationFrame(animationId)
   }, [messages])
 
+  // Command palette keyboard shortcut
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        setCommandPaletteOpen(open => !open)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
+
   const handleCreateProject = async () => {
     const name = prompt("Project Name:")
     if (!name) return
@@ -190,6 +221,7 @@ export default function Home() {
       const [newP] = await createProject(name)
       setProjects([...projects, newP])
       setActiveProjectId(newP.id)
+      toast.success("Project created")
     } catch (e) {
       console.error(e)
       setError("Failed to create project.")
@@ -198,21 +230,34 @@ export default function Home() {
 
   const handleCreateChat = async () => {
     if (!activeProjectId) {
-      alert("Select a project first")
+      toast.error("Select a project first")
       return
     }
     try {
       const [newC] = await createChat(activeProjectId, "New Chat")
       setChats([newC, ...chats])
       setActiveChatId(newC.id)
+      toast.success("Chat created")
     } catch (e) {
       console.error(e)
       setError("Failed to create chat.")
     }
   }
 
-  const handleFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
+  const handleCreateStandaloneChat = async () => {
+    try {
+      const [newC] = await createStandaloneChat("New Chat")
+      setStandaloneChats([newC, ...standaloneChats])
+      setActiveChatId(newC.id)
+      setActiveProjectId(null) // Clear project selection
+      toast.success("Chat created")
+    } catch (e) {
+      console.error(e)
+      setError("Failed to create chat.")
+    }
+  }
+
+  const handleSendMessage = async () => {
     if (!input.trim() || !activeChatId || isLoading) return
 
     console.log('[Form] Submit triggered')
@@ -225,6 +270,24 @@ export default function Home() {
     setInput("")
 
     await sendMessage({ text: userMessage })
+  }
+
+  const handleFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    handleSendMessage()
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Send on Ctrl+Enter or Cmd+Enter
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault()
+      handleSendMessage()
+    }
+    // Clear on Escape
+    if (e.key === 'Escape') {
+      setInput("")
+      textareaRef.current?.blur()
+    }
   }
 
   // Save user messages to database when messages array changes
@@ -249,27 +312,43 @@ export default function Home() {
     await deleteProject(id)
     setProjects(projects.filter(p => p.id !== id))
     if (activeProjectId === id) setActiveProjectId(null)
+    toast.success("Project deleted")
   }, [projects, activeProjectId])
+
+  const handleDeleteChat = useCallback(async (id: number) => {
+    await deleteChat(id)
+    setChats(chats.filter(c => c.id !== id))
+    setStandaloneChats(standaloneChats.filter(c => c.id !== id))
+    if (activeChatId === id) setActiveChatId(null)
+    toast.success("Chat deleted")
+  }, [chats, standaloneChats, activeChatId])
 
   const handleSelectProject = useCallback((id: number) => {
     setActiveProjectId(id)
     setActiveChatId(null) // Reset chat when switching project
   }, [])
 
+  const handleSelectStandaloneChat = useCallback((id: number) => {
+    setActiveProjectId(null) // Clear project when selecting standalone chat
+    setActiveChatId(id)
+  }, [])
+
   const handleUpdateChatTitle = useCallback(async (id: number, title: string) => {
     try {
       await updateChatTitle(id, title)
-      // Update local state
+      // Update local state for both types of chats
       setChats(chats.map(c => c.id === id ? { ...c, title } : c))
+      setStandaloneChats(standaloneChats.map(c => c.id === id ? { ...c, title } : c))
     } catch (e) {
       console.error(e)
       setError("Failed to update chat title.")
     }
-  }, [chats])
+  }, [chats, standaloneChats])
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setInput(e.target.value)
-  }
+  // Get the current chat title from either chats or standaloneChats
+  const currentChatTitle = activeChatId
+    ? chats.find(c => c.id === activeChatId)?.title || standaloneChats.find(c => c.id === activeChatId)?.title
+    : undefined
 
   return (
     <div className="flex h-screen w-full overflow-hidden p-4 gap-4">
@@ -278,19 +357,23 @@ export default function Home() {
         activeProjectId={activeProjectId}
         chats={chats}
         activeChatId={activeChatId}
+        standaloneChats={standaloneChats}
         onThemeToggle={() => setTheme(theme === "dark" ? "light" : "dark")}
         onCreateProject={handleCreateProject}
         onCreateChat={handleCreateChat}
+        onCreateStandaloneChat={handleCreateStandaloneChat}
         onSelectProject={handleSelectProject}
         onSelectChat={setActiveChatId}
+        onSelectStandaloneChat={handleSelectStandaloneChat}
         onDeleteProject={handleDeleteProject}
+        onDeleteChat={handleDeleteChat}
       />
 
       {/* Main Chat Area */}
       <main className="flex-1 flex flex-col glass-panel rounded-2xl overflow-hidden relative">
         <ChatHeader
           chatId={activeChatId}
-          chatTitle={activeChatId ? chats.find(c => c.id === activeChatId)?.title : undefined}
+          chatTitle={currentChatTitle}
           models={models}
           selectedModel={selectedModel}
           onModelChange={setSelectedModel}
@@ -321,12 +404,16 @@ export default function Home() {
         {/* Input Area */}
         <div className="p-4 border-t border-white/10 bg-white/5">
           <form onSubmit={handleFormSubmit} className="max-w-3xl mx-auto relative">
-            <input
+            <TextareaAutosize
+              ref={textareaRef}
               value={input}
-              onChange={handleInputChange}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
               disabled={!activeChatId || isLoading}
-              className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 pr-12 focus:outline-none focus:ring-1 focus:ring-primary/50 transition-all placeholder:text-muted-foreground disabled:opacity-50"
-              placeholder={activeChatId ? "Type a message..." : "Select a chat to start typing..."}
+              minRows={1}
+              maxRows={6}
+              className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 pr-12 focus:outline-none focus:ring-1 focus:ring-primary/50 transition-all placeholder:text-muted-foreground disabled:opacity-50 resize-none"
+              placeholder={activeChatId ? "Type a message... (Ctrl+Enter to send)" : "Select a chat to start typing..."}
             />
             <button
               type="submit"
@@ -337,10 +424,27 @@ export default function Home() {
             </button>
           </form>
           <div className="text-center mt-2">
-             <p className="text-[10px] text-muted-foreground">AI can make mistakes. Check important info.</p>
+             <p className="text-xs text-muted-foreground">AI can make mistakes. Check important info.</p>
           </div>
         </div>
       </main>
+
+      {/* Command Palette */}
+      <CommandPalette
+        open={commandPaletteOpen}
+        onOpenChange={setCommandPaletteOpen}
+        onNewChat={handleCreateStandaloneChat}
+        onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")}
+        models={models}
+        selectedModel={selectedModel}
+        onModelChange={setSelectedModel}
+        projects={projects}
+        standaloneChats={standaloneChats}
+        chats={chats}
+        onSelectProject={handleSelectProject}
+        onSelectChat={setActiveChatId}
+        onSelectStandaloneChat={handleSelectStandaloneChat}
+      />
     </div>
   )
 }

@@ -2,6 +2,7 @@
 
 import { memo, useState, useRef, useEffect } from "react"
 import { MessageSquare, Edit2, Check, X } from "lucide-react"
+import { ModelSelect } from "@/components/ui/ModelSelect"
 
 interface Model {
   name: string
@@ -112,31 +113,11 @@ export const ChatHeader = memo(function ChatHeader({
       </div>
       <div className="flex items-center gap-2">
         <span className="text-xs text-muted-foreground">Model:</span>
-        <select
+        <ModelSelect
+          models={models}
           value={selectedModel}
-          onChange={(e) => onModelChange(e.target.value)}
-          className="bg-transparent border border-white/10 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary [&>option]:text-black [&>option]:dark:text-white"
-        >
-          {models.length === 0 && <option>Loading...</option>}
-          {models.some(m => m.model.startsWith('gemini')) && (
-            <optgroup label="☁️ Cloud Models">
-              {models.filter(m => m.model.startsWith('gemini')).map((m) => (
-                <option key={m.digest} value={m.model}>
-                  {m.name}
-                </option>
-              ))}
-            </optgroup>
-          )}
-          {models.some(m => !m.model.startsWith('gemini')) && (
-            <optgroup label="🖥️ Local Models (Ollama)">
-              {models.filter(m => !m.model.startsWith('gemini')).map((m) => (
-                <option key={m.digest} value={m.model}>
-                  {m.name}
-                </option>
-              ))}
-            </optgroup>
-          )}
-        </select>
+          onChange={onModelChange}
+        />
       </div>
     </header>
   )
