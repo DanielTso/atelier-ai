@@ -28,17 +28,21 @@ export default function Home() {
   const [input, setInput] = useState("")
   const scrollRef = useRef<HTMLDivElement>(null)
 
+  // Use ref to always get current model in transport body function
+  const selectedModelRef = useRef(selectedModel)
+  selectedModelRef.current = selectedModel
+
   // Data State
   const [projects, setProjects] = useState<Project[]>([])
   const [activeProjectId, setActiveProjectId] = useState<number | null>(null)
   const [chats, setChats] = useState<Chat[]>([])
   const [activeChatId, setActiveChatId] = useState<number | null>(null)
 
-  // Create transport with current model in body
+  // Create transport with body as function to always get current model
   const transport = useMemo(() => new DefaultChatTransport({
     api: '/api/chat',
-    body: { model: selectedModel },
-  }), [selectedModel])
+    body: () => ({ model: selectedModelRef.current }),
+  }), [])
 
   const {
     messages,
