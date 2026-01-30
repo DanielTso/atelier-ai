@@ -61,6 +61,10 @@ export default function Home() {
   activeChatIdRef.current = activeChatId
   const activeProjectIdRef = useRef(activeProjectId)
   activeProjectIdRef.current = activeProjectId
+  const chatsRef = useRef(chats)
+  chatsRef.current = chats
+  const standaloneChatsRef = useRef(standaloneChats)
+  standaloneChatsRef.current = standaloneChats
 
   // Command palette state
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
@@ -180,6 +184,44 @@ export default function Home() {
         const messageCount = await getMessageCount(currentChatId)
         if (messageCount > SUMMARIZATION_THRESHOLD) {
           triggerSummarization(currentChatId, messageCount)
+        }
+
+        // Auto-generate title after first AI response (best-effort)
+        if (messageCount === 2) {
+          const chat = [...chatsRef.current, ...standaloneChatsRef.current]
+            .find(c => c.id === currentChatId)
+          if (chat && chat.title === 'New Chat') {
+            const dbMessages = await getChatMessages(currentChatId, 2)
+            const userMsg = dbMessages.find(m => m.role === 'user')
+            try {
+              const res = await fetch('/api/generate-title', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  chatId: currentChatId,
+                  messages: [
+                    { role: 'user', content: userMsg?.content || '' },
+                    { role: 'assistant', content: textContent },
+                  ],
+                  model: selectedModelRef.current,
+                }),
+              })
+              if (res.ok) {
+                const data = await res.json()
+                if (data?.title) {
+                  await updateChatTitle(currentChatId, data.title)
+                  setChats(prev => prev.map(c =>
+                    c.id === currentChatId ? { ...c, title: data.title } : c
+                  ))
+                  setStandaloneChats(prev => prev.map(c =>
+                    c.id === currentChatId ? { ...c, title: data.title } : c
+                  ))
+                }
+              }
+            } catch {
+              // Title generation is best-effort; silently ignore failures
+            }
+          }
         }
       }
     }
