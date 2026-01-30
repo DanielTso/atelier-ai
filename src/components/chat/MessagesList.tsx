@@ -1,7 +1,7 @@
 "use client"
 
 import { memo } from "react"
-import { Folder, MessageSquare, ExternalLink, Globe } from "lucide-react"
+import { Folder, MessageSquare, ExternalLink, Globe, Paperclip } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { motion, AnimatePresence } from "framer-motion"
@@ -9,9 +9,11 @@ import * as Tooltip from "@radix-ui/react-tooltip"
 import { cn } from "@/lib/utils"
 import type { UIMessage } from "ai"
 import { CodeBlock, InlineCode } from "./CodeBlock"
+import { SmoothStreamingWrapper } from "./SmoothStreamingWrapper"
 import { MessageActions } from "./MessageActions"
 import { TypingIndicator } from "@/components/ui/TypingIndicator"
 import { formatMessageTime, formatFullTime } from "@/lib/formatTime"
+import { parseFileMetadata, stripFilePrefix, getFileTypeLabel, formatFileSize, type FileMetadata } from "@/lib/fileAttachments"
 
 export type ChatMessage = UIMessage & { createdAt?: Date }
 
@@ -23,12 +25,47 @@ interface MessagesListProps {
   onDeleteMessage?: (id: string) => void
 }
 
-// Helper to extract text content from message parts
+// Helper to extract text content from message parts, stripping file prefix for display
 function getMessageText(message: UIMessage): string {
+  const raw = message.parts
+    .filter((part): part is { type: 'text'; text: string } => part.type === 'text')
+    .map(part => part.text)
+    .join('')
+  return stripFilePrefix(raw)
+}
+
+// Helper to extract raw text without stripping (for copy/actions)
+function getRawMessageText(message: UIMessage): string {
   return message.parts
     .filter((part): part is { type: 'text'; text: string } => part.type === 'text')
     .map(part => part.text)
     .join('')
+}
+
+// Helper to extract file metadata from a message
+function getMessageFiles(message: UIMessage): FileMetadata[] | null {
+  const raw = getRawMessageText(message)
+  return parseFileMetadata(raw)
+}
+
+// Display-only file chips for messages that included file attachments
+function MessageFileChips({ files }: { files: FileMetadata[] }) {
+  return (
+    <div className="flex flex-wrap gap-1.5 mb-2">
+      {files.map((file, index) => (
+        <div
+          key={`${file.name}-${index}`}
+          className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/10 border border-primary/20 text-xs"
+        >
+          <Paperclip className="h-2.5 w-2.5 text-primary/70" />
+          <span className="font-medium truncate max-w-[120px]">{file.name}</span>
+          <span className="text-muted-foreground">
+            {getFileTypeLabel(file.type, file.name)} · {formatFileSize(file.size)}
+          </span>
+        </div>
+      ))}
+    </div>
+  )
 }
 
 // Helper to extract source-url parts from a message
@@ -81,7 +118,7 @@ function SourcesList({ sources }: { sources: SourceUrl[] }) {
 // Move markdown components outside to prevent recreation on every render
 const MARKDOWN_COMPONENTS = {
   pre: ({children, ...props}: React.HTMLAttributes<HTMLPreElement>) => (
-    <CodeBlock className="overflow-auto w-full my-2 bg-black/50 p-3 rounded-lg" {...props}>
+    <CodeBlock className="overflow-x-auto w-full my-2 bg-black/50 p-3 rounded-lg [&_code]:whitespace-pre-wrap [&_code]:break-words" {...props}>
       {children}
     </CodeBlock>
   ),
@@ -169,7 +206,7 @@ export const MessagesList = memo(function MessagesList({
                 {m.role === 'user' ? 'You' : 'AI'}
               </div>
               <div className={cn(
-                "flex flex-col gap-1 max-w-[80%]",
+                "flex flex-col gap-1 max-w-[80%] min-w-0",
                 m.role === 'user' ? "items-end" : "items-start"
               )}>
                 <div className={cn(
@@ -178,16 +215,22 @@ export const MessagesList = memo(function MessagesList({
                     ? "bg-primary/20 border-primary/10 rounded-tr-none"
                     : "bg-white/5 border-white/10 rounded-tl-none"
                 )}>
+                  {m.role === 'user' && (() => {
+                    const files = getMessageFiles(m)
+                    return files ? <MessageFileChips files={files} /> : null
+                  })()}
                   <div className={cn(
-                    "prose dark:prose-invert text-base max-w-none break-words",
+                    "prose dark:prose-invert text-base max-w-none break-words overflow-hidden",
                     isStreamingMessage && "streaming-cursor"
                   )}>
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                      components={MARKDOWN_COMPONENTS}
-                    >
-                      {getMessageText(m)}
-                    </ReactMarkdown>
+                    <SmoothStreamingWrapper isStreaming={isStreamingMessage}>
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={MARKDOWN_COMPONENTS}
+                      >
+                        {getMessageText(m)}
+                      </ReactMarkdown>
+                    </SmoothStreamingWrapper>
                   </div>
                   {m.role === 'assistant' && <SourcesList sources={getMessageSources(m)} />}
                 </div>

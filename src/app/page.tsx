@@ -23,6 +23,8 @@ import { useLocalStorage } from "@/hooks/useLocalStorage"
 import { useSmartDefaults } from "@/hooks/useSmartDefaults"
 import { usePersonas } from "@/hooks/usePersonas"
 import { PersonaSuggestionBanner } from "@/components/chat/PersonaSuggestionBanner"
+import type { AttachedFile } from "@/lib/fileAttachments"
+import { buildFileMessage } from "@/lib/fileAttachments"
 
 interface Model {
   name: string
@@ -40,6 +42,7 @@ export default function Home() {
   const [selectedModel, setSelectedModel] = useState<string>("")
   const [error, setError] = useState<string | null>(null)
   const [input, setInput] = useState("")
+  const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([])
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // Use ref to always get current model in transport body function
@@ -418,7 +421,7 @@ export default function Home() {
   }
 
   const handleSendMessage = async () => {
-    if (!input.trim() || !activeChatId || isLoading) return
+    if ((!input.trim() && attachedFiles.length === 0) || !activeChatId || isLoading) return
 
     console.log('[Form] Submit triggered')
     console.log('[Form] input value:', input)
@@ -426,8 +429,11 @@ export default function Home() {
     console.log('[Form] selectedModel:', selectedModel)
     console.log('[Form] status:', status)
 
-    const userMessage = input.trim()
+    const userMessage = attachedFiles.length > 0
+      ? buildFileMessage(input.trim(), attachedFiles)
+      : input.trim()
     setInput("")
+    setAttachedFiles([])
 
     await sendMessage({ text: userMessage })
   }
@@ -724,6 +730,8 @@ export default function Home() {
           onSystemPromptChange={handleSaveSystemPrompt}
           onSystemPromptClick={() => setSystemPromptDialogOpen(true)}
           onModelChange={setSelectedModel}
+          attachedFiles={attachedFiles}
+          onFilesChange={setAttachedFiles}
         />
       </main>
 
