@@ -2,6 +2,53 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.0] - 2026-01-29
+
+### Google Search Grounding
+- **Web Search:** Gemini models automatically use `google.tools.googleSearch({})` for real-time web search when the query benefits from current information.
+- **Source Rendering:** Assistant messages display clickable source URL chips (globe icon, "SOURCES" label) below the response text. Sources are deduplicated by URL.
+- **Streaming Sources:** Enabled `sendSources: true` in `toUIMessageStreamResponse()` to stream `source-url` parts alongside text.
+
+## [1.0.0] - 2026-01-29
+
+### Intelligent Context Management
+- **Semantic Memory:** Messages are embedded via Ollama `nomic-embed-text` (768-dim vectors) and stored in SQLite. During chat, top-5 semantically similar past messages (cosine similarity ≥ 0.7) are injected as context, scoped to the current project.
+- **Four-Layer Context:** `/api/chat` now builds context as: system prompt → semantic retrieval → summary → recent 20 messages. All layers degrade gracefully.
+- **Embedding Status Indicator:** Brain icon in the input toolbar shows green with embedding count when active, gray "Memory off" when Ollama/model unavailable. Auto-refreshes after each message exchange.
+- **Async Embedding Pipeline:** `POST /api/embed` generates embeddings asynchronously after each message exchange (best-effort, zero latency impact).
+- **Embedding Status API:** `GET /api/embed` returns `{ available, embeddingCount }` for a chat or project scope.
+
+### Smart Personas
+- **Input Toolbar:** PersonaSelector moved from ChatHeader to a toolbar row above the message input, alongside System Prompt button and memory indicator.
+- **Combo Presets:** 5 new model+persona combinations: Code Review (Cloud), Creative Writing (Local), Quick Code Help (Cloud), Deep Analysis (Cloud), Private Assistant (Local).
+- **Grouped Dropdown:** PersonaSelector shows two sections: "Personas" (prompt-only) and "Model + Persona" (with Cloud/Local badges and descriptions). Selecting a combo switches both persona and model.
+- **Smart Suggestions:** Three-layer auto-suggestion system: explicit project defaults → usage pattern stats → keyword heuristics. Suggestion banner appears after 3+ messages when no persona is set.
+- **Topic Detection:** Keyword-based heuristics detect conversation topics (coding, debugging, creative, learning, brief) and suggest matching personas.
+- **LLM Classification:** Server-side conversation classifier (`POST /api/classify`) for ambiguous topics, cached per chat in `chat_topics` table.
+
+### Project Defaults
+- **Defaults Dialog:** Per-project default persona and model configuration via Radix dialog, accessible from sidebar settings icon on project rows.
+- **Usage Stats:** Dialog shows persona usage breakdown with progress bars.
+- **Auto-Apply:** Project defaults automatically applied when creating new chats within a project.
+
+### Usage Tracking
+- **Persona Usage:** Persona selection and model choice recorded in `persona_usage` table.
+- **Message Counts:** `incrementUsageMessageCount()` called after each assistant response for pattern-based suggestions.
+
+### Database
+- **New Tables:** `message_embeddings` (vector storage with indexes on chatId/projectId), `persona_usage` (tracking with indexes), `chat_topics` (detected topics with chatId index).
+- **New Project Columns:** `default_persona_id`, `default_model`.
+
+### New Files
+- `src/components/chat/ChatInputArea.tsx` — Input toolbar with PersonaSelector, system prompt button, memory indicator
+- `src/components/chat/PersonaSuggestionBanner.tsx` — Animated smart suggestion banner (Framer Motion)
+- `src/components/ui/ProjectDefaultsDialog.tsx` — Per-project defaults dialog with usage stats
+- `src/lib/embeddings.ts` — Embedding generation, cosine similarity, vector search, storage
+- `src/lib/topicDetection.ts` — Keyword-based conversation topic heuristics
+- `src/hooks/useSmartDefaults.ts` — Three-layer smart defaults hook
+- `src/app/api/embed/route.ts` — Embedding generation + status endpoint
+- `src/app/api/classify/route.ts` — LLM conversation classifier
+
 ## [0.9.0] - 2026-01-29
 
 ### Testing Infrastructure
