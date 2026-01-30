@@ -1,4 +1,4 @@
-# CLAUDE.md
+# CLAUDE.md — Atelier AI
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -52,7 +52,7 @@ TURSO_DATABASE_URL=libsql://... TURSO_AUTH_TOKEN=... npx drizzle-kit push
 
 ## Architecture Overview
 
-Next.js 16 App Router chat application with hybrid AI backend (Google Gemini cloud + Alibaba Cloud Qwen cloud + Ollama local models). Uses `@libsql/client` for database access — local SQLite (`file:sqlite.db`) in development, remote Turso database on Vercel.
+Atelier AI is a Next.js 16 App Router chat application with hybrid AI backend (Google Gemini cloud + Alibaba Cloud Qwen cloud + Ollama local models). Uses `@libsql/client` for database access — local SQLite (`file:sqlite.db`) in development, remote Turso database on Vercel.
 
 ### Data Flow
 
@@ -259,7 +259,7 @@ Config: `playwright.config.ts`. Tests in `e2e/`. Chromium only. Auto-starts dev 
 
 ## Deployment (Vercel + Turso)
 
-Production is deployed on **Vercel** with a **Turso** database. The Vercel project has these environment variables:
+Production is deployed on **Vercel** at [atelier-ai-app.vercel.app](https://atelier-ai-app.vercel.app). GitHub repo: [DanielTso/atelier-ai](https://github.com/DanielTso/atelier-ai). The Vercel project has these environment variables:
 - `TURSO_DATABASE_URL` — libSQL connection URL (e.g., `libsql://your-db.turso.io`)
 - `TURSO_AUTH_TOKEN` — Turso database auth token
 - `GOOGLE_GENERATIVE_AI_API_KEY` — Gemini API key
