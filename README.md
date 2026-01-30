@@ -39,11 +39,24 @@ A beautiful, local-first AI chat interface built with Next.js, Tailwind CSS, and
     ```
 5.  Open [http://localhost:3000](http://localhost:3000).
 
+## Testing
+
+```bash
+npm test             # Run unit/integration tests (Vitest)
+npm run test:watch   # Vitest in watch mode
+npm run test:e2e     # Run E2E tests (Playwright + Chromium)
+npm run test:all     # Run all tests
+```
+
+- **Vitest:** 75 unit/integration tests covering utilities, server actions, API routes, and React hooks. Uses in-memory SQLite for isolated DB tests.
+- **Playwright:** 8 E2E tests covering chat flow, project management, and command palette.
+
 ## Tech Stack
 - **Framework:** Next.js 16 (App Router)
 - **Styling:** Tailwind CSS v4
 - **Database:** SQLite + Drizzle ORM
 - **AI:** Vercel AI SDK v6 (`ai@^6.0`, `@ai-sdk/react@^3.0`) + Ollama + Google Generative AI
+- **Testing:** Vitest + Testing Library (unit/integration), Playwright (E2E)
 
 ## Documentation
 - [Version History (Changelog)](./CHANGELOG.md)

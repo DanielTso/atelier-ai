@@ -11,9 +11,13 @@ npm run build        # Production build
 npm run start        # Run production server
 npm run lint         # Run ESLint
 npx drizzle-kit push # Push schema changes to SQLite database
+npm test             # Run Vitest unit/integration tests
+npm run test:watch   # Run Vitest in watch mode
+npm run test:e2e     # Run Playwright E2E tests (starts dev server automatically)
+npm run test:all     # Run both Vitest and Playwright
 ```
 
-No test framework is configured. Path alias: `@/*` → `./src/*`.
+Path alias: `@/*` → `./src/*`.
 
 ## Environment Setup
 
@@ -122,3 +126,51 @@ const text = message.parts
 3. **Response format**: Use `toUIMessageStreamResponse()` not `toTextStreamResponse()`
 4. **Ollama provider**: Use `baseURL` (not `baseUrl`) in `createOllama()`
 5. **better-sqlite3**: Must be listed in `serverExternalPackages` in `next.config.ts`
+
+## Testing
+
+### Vitest (Unit + Integration)
+
+Config: `vitest.config.ts`. Tests in `tests/`. Node environment by default; hook tests use `// @vitest-environment jsdom` per-file.
+
+**Test structure:**
+- `tests/unit/lib/` — Utility tests (`cn()`, `formatMessageTime`, `formatFullTime`)
+- `tests/unit/actions/` — Server action tests (projects, chats, messages, context). Use in-memory SQLite via `tests/helpers/test-db.ts`
+- `tests/unit/api/` — API route tests (models, chat, summarize). Mock AI SDK providers
+- `tests/hooks/` — React hook tests (`useLocalStorage`, `usePersonas`, `useCollapseState`). jsdom environment
+
+**In-memory SQLite pattern:**
+```typescript
+import { createTestDb, testDb } from '../../helpers/test-db'
+
+vi.mock('@/db', () => ({
+  get db() { return testDb },
+}))
+
+beforeEach(() => { createTestDb() }) // Fresh DB per test
+```
+
+**API route tests** that import modules with `process.env`-guarded providers at module level require `vi.resetModules()` + `vi.doMock()` + dynamic `import()` to ensure env vars are set before module evaluation.
+
+### Playwright (E2E)
+
+Config: `playwright.config.ts`. Tests in `e2e/`. Chromium only. Auto-starts dev server via `webServer` config.
+
+**Key behaviors:**
+- Textarea is disabled until a chat is selected — tests must click "New Chat" first
+- Command palette opens with `Control+k` (not `Meta+k` on Linux), closes with `Control+k` toggle or backdrop click
+- The `CommandPalette` component renders a plain `div`, not a `dialog` element — locate by content (e.g., `getByPlaceholder('Type a command or search...')`)
+
+## MCP Servers
+
+Project-level MCP servers configured in `~/.claude.json` for this project:
+
+| Server | Transport | Purpose |
+|--------|-----------|---------|
+| Context7 | plugin | Up-to-date library documentation and code examples |
+| Playwright | plugin | Browser automation for live demos and visual testing |
+| SQLite | stdio | Direct database inspection and querying |
+| Next.js DevTools | stdio | Framework-aware debugging, server action inspection |
+| GitHub | http | PR/issue management, code search |
+| Sentry | http | Error tracking and stack trace analysis |
+| Vercel | http | Deployment management and build log analysis |

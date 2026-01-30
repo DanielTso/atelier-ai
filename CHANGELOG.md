@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.0] - 2026-01-29
+
+### Testing Infrastructure
+- **Vitest:** Added 75 unit/integration tests across 12 test files
+  - Utility tests: `cn()`, `formatMessageTime`, `formatFullTime`
+  - Server action tests: projects, chats, messages, context management (in-memory SQLite)
+  - API route tests: models, chat, summarize (mocked AI providers)
+  - React hook tests: `useLocalStorage`, `usePersonas`, `useCollapseState` (jsdom)
+- **Playwright:** Added 8 E2E tests across 3 test files (Chromium)
+  - Chat flow: app loads, create chat + type, send button
+  - Project management: sidebar visible, new project button
+  - Command palette: Ctrl+K open, toggle close, backdrop close
+- **Test Helpers:** In-memory SQLite factory (`tests/helpers/test-db.ts`), AI mock factories (`tests/helpers/mock-ai.ts`)
+- **Config:** `vitest.config.ts` (path alias, node env), `playwright.config.ts` (Chromium, auto dev server)
+
+### Developer Experience
+- **npm Scripts:** Added `test`, `test:watch`, `test:coverage`, `test:e2e`, `test:e2e:ui`, `test:all`
+- **MCP Servers:** Added SQLite, Next.js DevTools, GitHub, Sentry, and Vercel MCP servers for development workflow
+
+### Dependencies
+- Added: `vitest`, `@vitejs/plugin-react`, `jsdom`, `@testing-library/react`, `@testing-library/jest-dom`, `@playwright/test`
+
 ## [0.8.0] - 2026-01-28
 
 ### Project Management
