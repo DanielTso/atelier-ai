@@ -24,11 +24,15 @@ Path alias: `@/*` → `./src/*`.
 Create `.env.local` with:
 ```
 GOOGLE_GENERATIVE_AI_API_KEY=your_key_here
+DASHSCOPE_API_KEY=your_key_here
 ```
 
 API keys and Ollama URL can also be configured at runtime via the **Settings dialog** (stored in the `settings` SQLite table). DB values take priority over `.env.local`.
 
-For local models, run Ollama: `ollama serve` (default port 11434). Both providers are optional — the app works with either or both.
+Three providers are supported — all optional, the app works with any combination:
+- **Google Gemini** (cloud): Requires a Gemini API key
+- **Alibaba Cloud Qwen** (cloud): Requires a DashScope API key from [Alibaba Cloud Model Studio](https://modelstudio.console.alibabacloud.com). Uses the US Virginia region endpoint (`dashscope-us.aliyuncs.com`)
+- **Ollama** (local): Run `ollama serve` (default port 11434)
 
 ### Database (Local vs Vercel/Turso)
 
@@ -48,15 +52,15 @@ TURSO_DATABASE_URL=libsql://... TURSO_AUTH_TOKEN=... npx drizzle-kit push
 
 ## Architecture Overview
 
-Next.js 16 App Router chat application with hybrid AI backend (Google Gemini cloud + Ollama local models). Uses `@libsql/client` for database access — local SQLite (`file:sqlite.db`) in development, remote Turso database on Vercel.
+Next.js 16 App Router chat application with hybrid AI backend (Google Gemini cloud + Alibaba Cloud Qwen cloud + Ollama local models). Uses `@libsql/client` for database access — local SQLite (`file:sqlite.db`) in development, remote Turso database on Vercel.
 
 ### Data Flow
 
 1. **Client** (`src/app/page.tsx`) — Single-page chat UI using `useChat` from `@ai-sdk/react`. All application state lives here (projects, chats, messages, model selection).
 2. **Server Actions** (`src/app/actions.ts`) — "use server" functions for all DB reads/writes (CRUD for projects, chats, messages, settings).
 3. **API Routes**:
-   - `POST /api/chat` — Streams LLM responses. Routes to Gemini or Ollama based on model name prefix (`gemini` → Google, else → Ollama). Applies four-layer context: system prompt → semantic retrieval → summary → recent 20 messages. Gemini models have Google Search grounding enabled automatically.
-   - `GET /api/models` — Lists available models from both providers. Caches for 5 minutes.
+   - `POST /api/chat` — Streams LLM responses. Routes to provider based on model name prefix (`gemini` → Google, `qwen` → DashScope, else → Ollama). Applies four-layer context: system prompt → semantic retrieval → summary → recent 20 messages. Gemini models have Google Search grounding enabled automatically.
+   - `GET /api/models` — Lists available models from all three providers. Caches for 5 minutes.
    - `POST /api/summarize` — Compresses older messages into an LLM-generated summary. Auto-triggers at 30+ messages, keeps last 10 in full detail.
    - `POST /api/embed` — Async embedding generation via Ollama `nomic-embed-text` or Gemini `text-embedding-004` (cloud fallback). Called after each message exchange (best-effort).
    - `GET /api/embed` — Returns embedding status (`available`, `provider`, `embeddingCount`) for a chat or project scope.
@@ -66,7 +70,7 @@ Next.js 16 App Router chat application with hybrid AI backend (Google Gemini clo
 
 - `src/components/chat/` — Chat-specific components: `Sidebar` (project/chat navigation, collapsible with icon-only mode, project defaults icon), `MessagesList` (markdown rendering with Framer Motion animations, source URL rendering for grounded responses), `ChatHeader`, `ChatInputArea` (input toolbar with PersonaSelector, system prompt button, semantic memory indicator), `PersonaSuggestionBanner` (smart persona auto-suggestion), `ChatContextMenu`, `MessageActions`, `CodeBlock`
 - `src/components/ui/` — Reusable UI: `CommandPalette` (Cmd+K), `PersonaSelector` (6 built-in presets + 5 model+persona combos, grouped dropdown with Cloud/Local badges), `ModelSelect`, `SettingsDialog` (tabbed settings with API, Appearance, Model Defaults), `ProjectDefaultsDialog` (per-project persona/model defaults with usage stats), `SystemPromptDialog`, `RenameDialog`, `DeleteConfirmDialog`, `Toaster` (sonner)
-- `src/components/settings/` — Settings tab components: `ApiSettingsTab` (Gemini key, Ollama URL + test), `AppearanceSettingsTab` (theme, font size, density), `ModelDefaultsSettingsTab` (default model, system prompt, persona management)
+- `src/components/settings/` — Settings tab components: `ApiSettingsTab` (Gemini key, DashScope key, Ollama URL + test), `AppearanceSettingsTab` (theme, font size, density), `ModelDefaultsSettingsTab` (default model, system prompt, persona management)
 - `src/hooks/` — `useLocalStorage<T>` (generic localStorage with SSR safety, deferred hydration to avoid mismatch), `usePersonas` (persona management with combo presets), `useCollapseState` (sidebar section state), `useAppearanceSettings` (font size + message density), `useSmartDefaults` (three-layer persona suggestion: project defaults → usage patterns → keyword heuristics)
 - `src/lib/` — `utils.ts` (`cn()` via clsx + tailwind-merge), `formatTime.ts` (relative timestamps), `settings.ts` (server-side DB-first/env-fallback settings helper), `embeddings.ts` (hybrid Ollama/Gemini embedding generation, cosine similarity, vector search), `topicDetection.ts` (keyword-based conversation topic heuristics)
 
@@ -129,18 +133,19 @@ Retrieval uses brute-force cosine similarity (fast up to ~50K vectors). The `Cha
 ### Server Helper (`src/lib/settings.ts`)
 ```typescript
 // DB-first, env-fallback pattern
-getGeminiApiKey()    // DB 'gemini-api-key' → env GOOGLE_GENERATIVE_AI_API_KEY
-getOllamaBaseUrl()   // DB 'ollama-base-url' → default 'http://localhost:11434'
-getDefaultModel()    // DB 'default-model'
+getGeminiApiKey()        // DB 'gemini-api-key' → env GOOGLE_GENERATIVE_AI_API_KEY
+getDashScopeApiKey()     // DB 'dashscope-api-key' → env DASHSCOPE_API_KEY
+getOllamaBaseUrl()       // DB 'ollama-base-url' → default 'http://localhost:11434'
+getDefaultModel()        // DB 'default-model'
 getDefaultSystemPrompt() // DB 'default-system-prompt'
 ```
 
 ### API Route Provider Creation
-All API routes (`chat`, `models`, `summarize`) create providers **per-request** using the settings helper rather than module-level singletons. This allows runtime configuration changes without server restart.
+All API routes (`chat`, `models`, `summarize`) create providers **per-request** using the settings helper rather than module-level singletons. This allows runtime configuration changes without server restart. Provider routing uses model name prefixes: `gemini` → `@ai-sdk/google`, `qwen` → `@ai-sdk/openai` (DashScope), else → `ai-sdk-ollama`.
 
 ### Settings Dialog
 Three tabs accessed via sidebar Settings button:
-- **API & Providers**: Gemini API key (password field), Ollama URL with "Test Connection" button
+- **API & Providers**: Gemini API key (password field), DashScope API key (password field), Ollama URL with "Test Connection" button
 - **Appearance**: Theme (Light/Dark/System cards), font size (Small/Medium/Large), message density (Compact/Comfortable/Spacious)
 - **Model Defaults**: Default model selector, default system prompt, persona management (view built-in, add/delete custom)
 
@@ -213,6 +218,9 @@ const text = message.parts
 6. **Google Search tool name**: Must be exactly `google_search` in the `tools` object — this is a provider requirement
 7. **AI SDK v6 naming**: Use `maxOutputTokens` (not `maxTokens`) in `generateText()`/`streamText()` options
 8. **Source parts**: Google Search grounding sends `source-url` parts in `message.parts[]` alongside `text` parts. Deduplicate by URL before rendering.
+9. **DashScope provider**: Uses `@ai-sdk/openai` with `createOpenAI({ baseURL: 'https://dashscope-us.aliyuncs.com/compatible-mode/v1', apiKey })`. Must use `.chat(modelName)` (not `provider(modelName)`) to hit the Chat Completions endpoint — the default Responses API (`/responses`) is not supported by DashScope.
+10. **Qwen model prefix**: Use `startsWith('qwen')` (not `startsWith('qwen-')`) to match both `qwen-flash`/`qwen-plus` and `qwen3-max`/`qwen3-coder-plus` naming patterns.
+11. **DashScope regions**: API keys are region-specific. The hardcoded base URL uses US Virginia (`dashscope-us.aliyuncs.com`). Singapore uses `dashscope-intl.aliyuncs.com`, Beijing uses `dashscope.aliyuncs.com` — keys are not interchangeable between regions.
 
 ## Testing
 
@@ -250,10 +258,11 @@ Config: `playwright.config.ts`. Tests in `e2e/`. Chromium only. Auto-starts dev 
 
 ## Deployment (Vercel + Turso)
 
-Production is deployed on **Vercel** with a **Turso** database. The Vercel project has three environment variables:
+Production is deployed on **Vercel** with a **Turso** database. The Vercel project has these environment variables:
 - `TURSO_DATABASE_URL` — libSQL connection URL (e.g., `libsql://your-db.turso.io`)
 - `TURSO_AUTH_TOKEN` — Turso database auth token
 - `GOOGLE_GENERATIVE_AI_API_KEY` — Gemini API key
+- `DASHSCOPE_API_KEY` — Alibaba Cloud DashScope API key (for Qwen models)
 
 Deploy with `vercel --prod`. Schema changes must be pushed to Turso separately:
 ```bash
