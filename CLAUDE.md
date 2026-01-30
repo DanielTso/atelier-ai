@@ -69,7 +69,7 @@ Next.js 16 App Router chat application with hybrid AI backend (Google Gemini clo
 
 ### Component Structure
 
-- `src/components/chat/` — Chat-specific components: `Sidebar` (project/chat navigation, collapsible with icon-only mode, project defaults icon), `MessagesList` (markdown rendering with Framer Motion animations, source URL rendering for grounded responses), `ChatHeader`, `ChatInputArea` (input toolbar with PersonaSelector, system prompt button, semantic memory indicator), `PersonaSuggestionBanner` (smart persona auto-suggestion), `ChatContextMenu`, `MessageActions`, `CodeBlock`
+- `src/components/chat/` — Chat-specific components: `Sidebar` (project/chat navigation, collapsible with icon-only mode, project defaults icon), `MessagesList` (markdown rendering with Framer Motion animations, source URL rendering for grounded responses), `SmoothStreamingWrapper` (ResizeObserver-based smooth height transitions during streaming), `ChatHeader`, `ChatInputArea` (input toolbar with PersonaSelector, system prompt button, semantic memory indicator), `PersonaSuggestionBanner` (smart persona auto-suggestion), `ChatContextMenu`, `MessageActions`, `CodeBlock`
 - `src/components/ui/` — Reusable UI: `CommandPalette` (Cmd+K), `PersonaSelector` (6 built-in presets + 5 model+persona combos, grouped dropdown with Cloud/Local badges), `ModelSelect`, `SettingsDialog` (tabbed settings with API, Appearance, Model Defaults), `ProjectDefaultsDialog` (per-project persona/model defaults with usage stats), `SystemPromptDialog`, `RenameDialog`, `DeleteConfirmDialog`, `Toaster` (sonner)
 - `src/components/settings/` — Settings tab components: `ApiSettingsTab` (Gemini key, DashScope key, Ollama URL + test), `AppearanceSettingsTab` (theme, font size, density), `ModelDefaultsSettingsTab` (default model, system prompt, persona management)
 - `src/hooks/` — `useLocalStorage<T>` (generic localStorage with SSR safety, deferred hydration to avoid mismatch), `usePersonas` (persona management with combo presets), `useCollapseState` (sidebar section state), `useAppearanceSettings` (font size + message density), `useSmartDefaults` (three-layer persona suggestion: project defaults → usage patterns → keyword heuristics)
@@ -94,7 +94,7 @@ Seven tables: `projects` → `chats` → `messages` (cascade deletes), `settings
 Tailwind CSS v4 with a glassmorphism design system. Key patterns:
 - Glass panels: `bg-background/60 backdrop-blur-xl` (defined as `.glass-panel` in `globals.css`)
 - Design tokens as CSS custom properties in `globals.css` (HSL format, light/dark variants)
-- Animations via Framer Motion (message entrance) and CSS keyframes (streaming cursor)
+- Animations via Framer Motion (message entrance), CSS keyframes (streaming cursor blink, chunk fade-in), and `SmoothStreamingWrapper` (ResizeObserver height transitions during streaming)
 - Radix UI primitives for accessible dialogs, dropdowns, selects, tooltips
 
 ### Context Management

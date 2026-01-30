@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.1] - 2026-01-30
+
+### Smooth Streaming Animation
+- **SmoothStreamingWrapper:** New component wraps assistant message content with ResizeObserver-based smooth height transitions during streaming. Eliminates content jumping as new tokens arrive.
+- **Chunk Fade-In:** CSS `chunk-fade-in` animation applies a subtle fade-in + slide-up effect to the last paragraph, list item, or code block while streaming.
+- **Cursor Blink Tuning:** Streaming cursor blink speed adjusted from 1.0s to 0.8s for a snappier feel.
+- **Cleanup:** Removed all debug `console.log` statements from production code (13 statements across summarization, onFinish, useChat, form submit, and message save flows).
+
+### New Files
+- `src/components/chat/SmoothStreamingWrapper.tsx` — ResizeObserver wrapper for smooth streaming height transitions
+
 ## [1.2.0] - 2026-01-30
 
 ### Auto-Title Generation
