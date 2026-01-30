@@ -1,17 +1,20 @@
 import { NextResponse } from 'next/server';
+import { getGeminiApiKey, getOllamaBaseUrl } from '@/lib/settings';
 
 export async function GET() {
-  // Gemini 3 Models (Premium Subscription)
-  const geminiModels = [
+  // Only include Gemini models if an API key is configured
+  const geminiApiKey = await getGeminiApiKey();
+  const geminiModels = geminiApiKey ? [
     { name: 'Gemini 3 Flash', model: 'gemini-3-flash-preview', digest: 'gemini-3-flash-preview' },
     { name: 'Gemini 3 Pro', model: 'gemini-3-pro-preview', digest: 'gemini-3-pro-preview' },
     { name: 'Gemini 3 Deep Think', model: 'gemini-3-deep-think', digest: 'gemini-3-deep-think' },
-  ];
+  ] : [];
 
-  // Try to fetch local Ollama models
+  // Try to fetch local Ollama models using configured URL
+  const ollamaBaseUrl = await getOllamaBaseUrl();
   let ollamaModels: { name: string; model: string; digest: string }[] = [];
   try {
-    const ollamaRes = await fetch('http://localhost:11434/api/tags', {
+    const ollamaRes = await fetch(`${ollamaBaseUrl}/api/tags`, {
       signal: AbortSignal.timeout(2000), // 2 second timeout
     });
     if (ollamaRes.ok) {

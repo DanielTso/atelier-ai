@@ -1,5 +1,6 @@
 import { memo, useState, useRef, useEffect, useMemo } from "react"
-import { Folder, Plus, Settings, Sun, Moon, MessageSquare, ChevronDown, MessageCircle, Archive, Pencil, Check, X } from "lucide-react"
+import { Folder, Plus, Settings, Sun, Moon, MessageSquare, ChevronDown, MessageCircle, Archive, Pencil, Check, X, PanelLeftClose, PanelLeftOpen } from "lucide-react"
+import * as Tooltip from "@radix-ui/react-tooltip"
 import { cn } from "@/lib/utils"
 import { ChatContextMenu } from "./ChatContextMenu"
 import { useCollapseState } from "@/hooks/useCollapseState"
@@ -23,6 +24,8 @@ interface SidebarProps {
   activeChatId: number | null
   standaloneChats: Chat[]
   archivedChats: Chat[]
+  collapsed: boolean
+  onToggleCollapse: () => void
   onThemeToggle: () => void
   onCreateProject: () => void
   onCreateChat: () => void
@@ -37,6 +40,7 @@ interface SidebarProps {
   onArchiveChat: (chatId: number) => void
   onRestoreChat: (chatId: number) => void
   onDeleteChat: (chatId: number) => void
+  onOpenSettings: () => void
 }
 
 export const Sidebar = memo(function Sidebar({
@@ -46,6 +50,8 @@ export const Sidebar = memo(function Sidebar({
   activeChatId,
   standaloneChats,
   archivedChats,
+  collapsed,
+  onToggleCollapse,
   onThemeToggle,
   onCreateProject,
   onCreateChat,
@@ -60,6 +66,7 @@ export const Sidebar = memo(function Sidebar({
   onArchiveChat,
   onRestoreChat,
   onDeleteChat,
+  onOpenSettings,
 }: SidebarProps) {
   // State for inline project editing
   const [editingProjectId, setEditingProjectId] = useState<number | null>(null)
@@ -116,20 +123,69 @@ export const Sidebar = memo(function Sidebar({
     isProjectCollapsed,
   } = useCollapseState()
 
+  // Helper for tooltip in collapsed mode
+  const CollapsedButton = ({ label, icon: Icon, onClick, className: btnClass }: { label: string; icon: typeof Plus; onClick: () => void; className?: string }) => (
+    <Tooltip.Provider delayDuration={200}>
+      <Tooltip.Root>
+        <Tooltip.Trigger asChild>
+          <button
+            onClick={onClick}
+            className={cn("p-2 rounded-lg hover:bg-white/10 transition-colors", btnClass)}
+          >
+            <Icon className="h-5 w-5" />
+          </button>
+        </Tooltip.Trigger>
+        <Tooltip.Portal>
+          <Tooltip.Content
+            side="right"
+            sideOffset={8}
+            className="px-2 py-1 text-xs rounded bg-popover border border-white/10 shadow-lg z-50"
+          >
+            {label}
+            <Tooltip.Arrow className="fill-popover" />
+          </Tooltip.Content>
+        </Tooltip.Portal>
+      </Tooltip.Root>
+    </Tooltip.Provider>
+  )
+
+  // Collapsed sidebar — icon-only strip
+  if (collapsed) {
+    return (
+      <aside className="w-14 flex flex-col items-center glass-panel rounded-2xl py-4 px-1 transition-all duration-300 gap-2 shrink-0">
+        <CollapsedButton label="Expand sidebar" icon={PanelLeftOpen} onClick={onToggleCollapse} />
+        <div className="h-px w-full bg-white/10 my-1" />
+        <CollapsedButton label="New Chat" icon={Plus} onClick={onCreateStandaloneChat} className="text-primary" />
+        <div className="flex-1" />
+        <CollapsedButton label="Toggle theme" icon={Sun} onClick={onThemeToggle} />
+        <CollapsedButton label="Settings" icon={Settings} onClick={onOpenSettings} />
+      </aside>
+    )
+  }
+
   return (
-    <aside className="w-64 flex flex-col glass-panel rounded-2xl p-4 transition-all">
+    <aside className="w-64 flex flex-col glass-panel rounded-2xl p-4 transition-all duration-300 shrink-0">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-400">
           Gemini Local
         </h1>
-        <button
-          onClick={onThemeToggle}
-          className="relative p-2 rounded-full hover:bg-white/10 transition-colors"
-        >
-          <Sun className="h-5 w-5 rotate-0 scale-100 transition-all duration-300 dark:-rotate-90 dark:scale-0" />
-          <Moon className="absolute top-2 left-2 h-5 w-5 rotate-90 scale-0 transition-all duration-300 dark:rotate-0 dark:scale-100" />
-          <span className="sr-only">Toggle theme</span>
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={onThemeToggle}
+            className="relative p-2 rounded-full hover:bg-white/10 transition-colors"
+          >
+            <Sun className="h-5 w-5 rotate-0 scale-100 transition-all duration-300 dark:-rotate-90 dark:scale-0" />
+            <Moon className="absolute top-2 left-2 h-5 w-5 rotate-90 scale-0 transition-all duration-300 dark:rotate-0 dark:scale-100" />
+            <span className="sr-only">Toggle theme</span>
+          </button>
+          <button
+            onClick={onToggleCollapse}
+            className="p-2 rounded-full hover:bg-white/10 transition-colors text-muted-foreground"
+            title="Collapse sidebar"
+          >
+            <PanelLeftClose className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
       {/* New Chat Button (Standalone) */}
@@ -405,7 +461,10 @@ export const Sidebar = memo(function Sidebar({
       </div>
 
       <div className="mt-4 pt-4 border-t border-white/10">
-        <button className="flex items-center gap-2 p-2 w-full rounded-lg hover:bg-white/5 text-sm text-muted-foreground transition-colors">
+        <button
+          onClick={onOpenSettings}
+          className="flex items-center gap-2 p-2 w-full rounded-lg hover:bg-white/5 text-sm text-muted-foreground transition-colors"
+        >
           <Settings className="h-4 w-4" />
           Settings
         </button>

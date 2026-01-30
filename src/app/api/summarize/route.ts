@@ -2,16 +2,7 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createOllama } from 'ai-sdk-ollama';
 import { generateText } from 'ai';
 import { getMessagesForSummarization, updateChatSummary, getChatWithSummary } from '@/app/actions';
-
-const google = process.env.GOOGLE_GENERATIVE_AI_API_KEY
-  ? createGoogleGenerativeAI({
-      apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
-    })
-  : null;
-
-const ollama = createOllama({
-  baseURL: 'http://localhost:11434',
-});
+import { getGeminiApiKey, getOllamaBaseUrl } from '@/lib/settings';
 
 const SUMMARIZATION_PROMPT = `You are a conversation summarizer. Your task is to create a concise summary of the conversation that preserves:
 - Key topics discussed
@@ -69,11 +60,15 @@ export async function POST(req: Request) {
 
     let selectedModel;
     if (isGeminiModel) {
-      if (!google) {
-        throw new Error("Google Gemini API Key is missing");
+      const apiKey = await getGeminiApiKey();
+      if (!apiKey) {
+        throw new Error("Google Gemini API Key is missing. Set it in Settings or .env.local.");
       }
+      const google = createGoogleGenerativeAI({ apiKey });
       selectedModel = google(modelName);
     } else {
+      const baseURL = await getOllamaBaseUrl();
+      const ollama = createOllama({ baseURL });
       selectedModel = ollama(modelName);
     }
 

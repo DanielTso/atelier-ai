@@ -7,14 +7,18 @@ import { DefaultChatTransport } from "ai"
 import { useEffect, useState, useRef, useCallback, useMemo } from "react"
 import TextareaAutosize from "react-textarea-autosize"
 import { toast } from "sonner"
+import { cn } from "@/lib/utils"
 import { getProjects, createProject, getChats, getAllProjectChats, createChat, getChatMessages, saveMessage, deleteProject, updateProjectName, updateChatTitle, getStandaloneChats, createStandaloneChat, deleteChat, moveChatToProject, archiveChat, restoreChat, getArchivedChats, getMessageCount, getChatWithContext, updateChatSystemPrompt } from "./actions"
 import { Sidebar } from "@/components/chat/Sidebar"
 import { ChatHeader } from "@/components/chat/ChatHeader"
-import { MessagesList } from "@/components/chat/MessagesList"
+import { MessagesList, type ChatMessage } from "@/components/chat/MessagesList"
 import { CommandPalette } from "@/components/ui/CommandPalette"
 import { DeleteConfirmDialog } from "@/components/ui/DeleteConfirmDialog"
 import { RenameDialog } from "@/components/ui/RenameDialog"
 import { SystemPromptDialog } from "@/components/ui/SystemPromptDialog"
+import { SettingsDialog } from "@/components/ui/SettingsDialog"
+import { useAppearanceSettings } from "@/hooks/useAppearanceSettings"
+import { useLocalStorage } from "@/hooks/useLocalStorage"
 
 interface Model {
   name: string
@@ -63,6 +67,13 @@ export default function Home() {
   const [renameTarget, setRenameTarget] = useState<{ id: number; title: string } | null>(null)
   const [systemPromptDialogOpen, setSystemPromptDialogOpen] = useState(false)
   const [currentSystemPrompt, setCurrentSystemPrompt] = useState<string | null>(null)
+  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false)
+
+  // Sidebar collapse
+  const [sidebarCollapsed, setSidebarCollapsed] = useLocalStorage('sidebar-collapsed', false)
+
+  // Appearance settings
+  const { fontSize, setFontSize, messageDensity, setMessageDensity } = useAppearanceSettings()
 
   // Create transport with body as function to always get current values
   const transport = useMemo(() => new DefaultChatTransport({
@@ -236,6 +247,7 @@ export default function Home() {
         id: m.id.toString(),
         role: m.role as 'user' | 'assistant',
         parts: [{ type: 'text' as const, text: m.content }],
+        createdAt: m.createdAt ?? new Date(),
       })))
     } catch (e) {
       console.error(e)
@@ -502,7 +514,11 @@ export default function Home() {
     : undefined
 
   return (
-    <div className="flex h-screen w-full overflow-hidden p-4 gap-4">
+    <div className={cn(
+      "flex h-screen w-full overflow-hidden p-4 gap-4",
+      fontSize === 'small' && 'text-sm',
+      fontSize === 'large' && 'text-lg',
+    )}>
       <Sidebar
         projects={projects}
         activeProjectId={activeProjectId}
@@ -510,6 +526,8 @@ export default function Home() {
         activeChatId={activeChatId}
         standaloneChats={standaloneChats}
         archivedChats={archivedChats}
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
         onThemeToggle={() => setTheme(theme === "dark" ? "light" : "dark")}
         onCreateProject={handleCreateProject}
         onCreateChat={handleCreateChat}
@@ -524,6 +542,7 @@ export default function Home() {
         onArchiveChat={handleArchiveChat}
         onRestoreChat={handleRestoreChat}
         onDeleteChat={handleRequestDelete}
+        onOpenSettings={() => setSettingsDialogOpen(true)}
       />
 
       {/* Main Chat Area */}
@@ -552,9 +571,14 @@ export default function Home() {
         )}
 
         {/* Messages */}
-        <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-6">
+        <div ref={scrollRef} className={cn(
+          "flex-1 overflow-y-auto p-6",
+          messageDensity === 'compact' && 'space-y-2',
+          messageDensity === 'comfortable' && 'space-y-6',
+          messageDensity === 'spacious' && 'space-y-10',
+        )}>
           <MessagesList
-            messages={messages}
+            messages={messages as ChatMessage[]}
             isLoading={isLoading}
             activeChatId={activeChatId}
             selectedModel={selectedModel}
@@ -629,6 +653,18 @@ export default function Home() {
         onOpenChange={setSystemPromptDialogOpen}
         currentPrompt={currentSystemPrompt}
         onSave={handleSaveSystemPrompt}
+      />
+
+      {/* Settings Dialog */}
+      <SettingsDialog
+        open={settingsDialogOpen}
+        onOpenChange={setSettingsDialogOpen}
+        models={models}
+        onSettingsChanged={fetchModels}
+        fontSize={fontSize}
+        onFontSizeChange={setFontSize}
+        messageDensity={messageDensity}
+        onMessageDensityChange={setMessageDensity}
       />
     </div>
   )

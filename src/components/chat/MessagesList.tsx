@@ -13,8 +13,10 @@ import { MessageActions } from "./MessageActions"
 import { TypingIndicator } from "@/components/ui/TypingIndicator"
 import { formatMessageTime, formatFullTime } from "@/lib/formatTime"
 
+export type ChatMessage = UIMessage & { createdAt?: Date }
+
 interface MessagesListProps {
-  messages: UIMessage[]
+  messages: ChatMessage[]
   isLoading: boolean
   activeChatId: number | null
   selectedModel: string
@@ -88,10 +90,6 @@ export const MessagesList = memo(function MessagesList({
     )
   }
 
-  // For now, use current time as a fallback since we don't have createdAt from the DB
-  // In a real app, you'd pass createdAt from the message
-  const now = new Date()
-
   // Find the last assistant message for streaming cursor
   const lastAssistantIndex = messages.reduce((lastIdx, m, idx) =>
     m.role === 'assistant' ? idx : lastIdx, -1)
@@ -154,7 +152,7 @@ export const MessagesList = memo(function MessagesList({
                   <Tooltip.Root>
                     <Tooltip.Trigger asChild>
                       <span className="text-xs text-muted-foreground/60 cursor-default">
-                        {formatMessageTime(now)}
+                        {formatMessageTime(m.createdAt ?? new Date())}
                       </span>
                     </Tooltip.Trigger>
                     <Tooltip.Portal>
@@ -162,7 +160,7 @@ export const MessagesList = memo(function MessagesList({
                         className="z-50 px-3 py-1.5 text-xs bg-popover border border-white/10 rounded-lg shadow-lg animate-in fade-in-0 zoom-in-95"
                         sideOffset={5}
                       >
-                        {formatFullTime(now)}
+                        {formatFullTime(m.createdAt ?? new Date())}
                         <Tooltip.Arrow className="fill-popover" />
                       </Tooltip.Content>
                     </Tooltip.Portal>

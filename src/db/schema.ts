@@ -31,3 +31,9 @@ export const messages = sqliteTable('messages', {
   chatIdIdx: index('idx_messages_chat_id').on(table.chatId),
   createdAtIdx: index('idx_messages_created_at').on(table.createdAt),
 }));
+
+export const settings = sqliteTable('settings', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+});

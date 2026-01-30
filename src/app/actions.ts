@@ -1,8 +1,8 @@
 'use server'
 
 import { db } from '@/db'
-import { projects, chats, messages } from '@/db/schema'
-import { eq, desc, isNull, isNotNull, and, gt, asc, count } from 'drizzle-orm'
+import { projects, chats, messages, settings } from '@/db/schema'
+import { eq, desc, isNull, isNotNull, and, gt, asc, count, inArray } from 'drizzle-orm'
 
 export async function getProjects() {
   return await db.select().from(projects).all()
@@ -163,4 +163,40 @@ export async function getRecentMessagesAfterSummary(chatId: number, afterMessage
     ))
     .orderBy(asc(messages.createdAt))
     .all()
+}
+
+// Settings Actions
+
+export async function getSetting(key: string) {
+  const result = await db.select().from(settings).where(eq(settings.key, key)).get()
+  return result?.value ?? null
+}
+
+export async function getSettings(keys: string[]) {
+  if (keys.length === 0) return {}
+  const results = await db.select().from(settings).where(inArray(settings.key, keys)).all()
+  const map: Record<string, string> = {}
+  for (const row of results) {
+    map[row.key] = row.value
+  }
+  return map
+}
+
+export async function setSetting(key: string, value: string) {
+  return await db.insert(settings)
+    .values({ key, value, updatedAt: new Date() })
+    .onConflictDoUpdate({ target: settings.key, set: { value, updatedAt: new Date() } })
+    .returning()
+}
+
+export async function setSettings(entries: { key: string; value: string }[]) {
+  const results = []
+  for (const entry of entries) {
+    const result = await db.insert(settings)
+      .values({ key: entry.key, value: entry.value, updatedAt: new Date() })
+      .onConflictDoUpdate({ target: settings.key, set: { value: entry.value, updatedAt: new Date() } })
+      .returning()
+    results.push(result)
+  }
+  return results
 }

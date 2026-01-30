@@ -2,17 +2,7 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createOllama } from 'ai-sdk-ollama';
 import { streamText, convertToModelMessages, type UIMessage } from 'ai';
 import { getChatWithContext } from '@/app/actions';
-
-// Create singleton provider instances at module level for better performance
-const google = process.env.GOOGLE_GENERATIVE_AI_API_KEY
-  ? createGoogleGenerativeAI({
-      apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
-    })
-  : null;
-
-const ollama = createOllama({
-  baseURL: 'http://localhost:11434',
-});
+import { getGeminiApiKey, getOllamaBaseUrl } from '@/lib/settings';
 
 // Configuration for hybrid context management
 const RECENT_MESSAGES_LIMIT = 20; // Keep last N messages in full detail
@@ -30,12 +20,15 @@ export async function POST(req: Request) {
 
     let selectedModel;
     if (isGeminiModel) {
-      if (!google) {
-        throw new Error("Google Gemini API Key is missing. Please check your .env.local file.");
+      const apiKey = await getGeminiApiKey();
+      if (!apiKey) {
+        throw new Error("Google Gemini API Key is missing. Set it in Settings or .env.local.");
       }
+      const google = createGoogleGenerativeAI({ apiKey });
       selectedModel = google(modelName);
     } else {
-      // Ollama model
+      const baseURL = await getOllamaBaseUrl();
+      const ollama = createOllama({ baseURL });
       selectedModel = ollama(modelName);
     }
 

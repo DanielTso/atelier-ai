@@ -59,6 +59,10 @@ describe('POST /api/chat', () => {
     vi.doMock('ai-sdk-ollama', () => ({
       createOllama: () => mockOllamaFn,
     }))
+    vi.doMock('@/lib/settings', () => ({
+      getGeminiApiKey: () => Promise.resolve('test-key'),
+      getOllamaBaseUrl: () => Promise.resolve('http://localhost:11434'),
+    }))
 
     const { POST } = await import('@/app/api/chat/route')
     return POST(
