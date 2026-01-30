@@ -7,6 +7,7 @@ import { PersonaSelector } from '@/components/ui/PersonaSelector'
 
 interface EmbedStatus {
   available: boolean
+  provider: 'ollama' | 'gemini' | null
   embeddingCount: number
 }
 
@@ -103,13 +104,13 @@ export const ChatInputArea = memo(function ChatInputArea({
               <div
                 className="ml-auto flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs text-muted-foreground"
                 title={embedStatus.available
-                  ? `Semantic memory active — ${embedStatus.embeddingCount} embeddings stored`
-                  : 'Semantic memory offline — install nomic-embed-text in Ollama'}
+                  ? `Semantic memory active via ${embedStatus.provider === 'gemini' ? 'Gemini' : 'Ollama'} — ${embedStatus.embeddingCount} embeddings stored`
+                  : 'Semantic memory offline — configure Ollama or Gemini API key'}
               >
                 <Brain className={`h-3.5 w-3.5 ${embedStatus.available ? 'text-emerald-400' : 'text-muted-foreground/50'}`} />
                 <span className="hidden sm:inline">
                   {embedStatus.available
-                    ? `${embedStatus.embeddingCount} memories`
+                    ? `${embedStatus.embeddingCount} memories (${embedStatus.provider === 'gemini' ? 'Gemini' : 'Ollama'})`
                     : 'Memory off'}
                 </span>
               </div>

@@ -1,33 +1,49 @@
-import { getOllamaBaseUrl } from './settings'
+import { embed } from 'ai'
+import { createGoogleGenerativeAI } from '@ai-sdk/google'
+import { getOllamaBaseUrl, getGeminiApiKey } from './settings'
 import { saveMessageEmbedding, getEmbeddingsForChat, getEmbeddingsForProject, getAllEmbeddings } from '@/app/actions'
 
 const EMBEDDING_MODEL = 'nomic-embed-text'
+const GEMINI_EMBEDDING_MODEL = 'text-embedding-004'
+
+export type EmbeddingProvider = 'ollama' | 'gemini' | null
 
 /**
- * Check if the embedding model is available via Ollama.
- * Returns false if Ollama is down or the model isn't installed.
+ * Check if an embedding provider is available.
+ * Returns the provider name ('ollama' or 'gemini') or null if none available.
  */
-export async function ensureEmbeddingModel(): Promise<boolean> {
+export async function ensureEmbeddingModel(): Promise<{ available: boolean; provider: EmbeddingProvider }> {
+  // Try Ollama first
   try {
     const baseUrl = await getOllamaBaseUrl()
     const res = await fetch(`${baseUrl}/api/tags`, {
       signal: AbortSignal.timeout(3000),
     })
-    if (!res.ok) return false
-
-    const data = await res.json()
-    const models: { name: string }[] = data.models || []
-    return models.some(m => m.name.startsWith(EMBEDDING_MODEL))
+    if (res.ok) {
+      const data = await res.json()
+      const models: { name: string }[] = data.models || []
+      if (models.some(m => m.name.startsWith(EMBEDDING_MODEL))) {
+        return { available: true, provider: 'ollama' }
+      }
+    }
   } catch {
-    return false
+    // Ollama unavailable, try Gemini
   }
+
+  // Fall back to Gemini
+  const apiKey = await getGeminiApiKey()
+  if (apiKey) {
+    return { available: true, provider: 'gemini' }
+  }
+
+  return { available: false, provider: null }
 }
 
 /**
- * Generate an embedding vector for the given text using Ollama's nomic-embed-text model.
+ * Generate an embedding using Ollama's nomic-embed-text model.
  * Returns a 768-dimensional float array.
  */
-export async function generateEmbedding(text: string): Promise<number[]> {
+async function generateEmbeddingWithOllama(text: string): Promise<number[]> {
   const baseUrl = await getOllamaBaseUrl()
   const res = await fetch(`${baseUrl}/api/embeddings`, {
     method: 'POST',
@@ -40,11 +56,62 @@ export async function generateEmbedding(text: string): Promise<number[]> {
   })
 
   if (!res.ok) {
-    throw new Error(`Embedding generation failed: ${res.status} ${res.statusText}`)
+    throw new Error(`Ollama embedding failed: ${res.status} ${res.statusText}`)
   }
 
   const data = await res.json()
   return data.embedding
+}
+
+/**
+ * Generate an embedding using Google Gemini text-embedding-004.
+ * Returns a 768-dimensional float array (matching nomic-embed-text).
+ */
+async function generateEmbeddingWithGemini(
+  text: string,
+  taskType: 'query' | 'document' = 'document'
+): Promise<number[]> {
+  const apiKey = await getGeminiApiKey()
+  if (!apiKey) {
+    throw new Error('Gemini API key not configured')
+  }
+
+  const google = createGoogleGenerativeAI({ apiKey })
+  const { embedding } = await embed({
+    model: google.textEmbeddingModel(GEMINI_EMBEDDING_MODEL),
+    value: text,
+    providerOptions: {
+      google: {
+        outputDimensionality: 768,
+        taskType: taskType === 'query' ? 'RETRIEVAL_QUERY' : 'RETRIEVAL_DOCUMENT',
+      },
+    },
+  })
+
+  return embedding
+}
+
+/**
+ * Generate an embedding vector for the given text.
+ * Tries Ollama first, falls back to Gemini if unavailable.
+ * Returns a 768-dimensional float array.
+ */
+export async function generateEmbedding(
+  text: string,
+  taskType: 'query' | 'document' = 'document'
+): Promise<number[]> {
+  // Try Ollama first
+  try {
+    const result = await generateEmbeddingWithOllama(text)
+    console.log('[Embeddings] Using Ollama')
+    return result
+  } catch {
+    // Ollama unavailable, try Gemini
+  }
+
+  // Fall back to Gemini
+  console.log('[Embeddings] Ollama unavailable, using Gemini')
+  return generateEmbeddingWithGemini(text, taskType)
 }
 
 /**
@@ -110,7 +177,7 @@ export async function findSimilarMessages(
 
 /**
  * Generate an embedding for a message and store it in the database.
- * Silently fails if Ollama is unavailable.
+ * Silently fails if no embedding provider is available.
  */
 export async function embedAndStore(
   messageId: number,

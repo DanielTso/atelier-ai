@@ -64,7 +64,7 @@ export async function POST(req: Request) {
             .join('') || '';
 
           if (queryText) {
-            const queryEmbedding = await generateEmbedding(queryText);
+            const queryEmbedding = await generateEmbedding(queryText, 'query');
             const similar = await findSimilarMessages(queryEmbedding, {
               projectId: chat?.projectId ?? undefined,
               chatId: !chat?.projectId ? chatId : undefined,

@@ -7,7 +7,7 @@ export async function GET(req: Request) {
     const chatId = url.searchParams.get('chatId');
     const projectId = url.searchParams.get('projectId');
 
-    const modelAvailable = await ensureEmbeddingModel();
+    const { available, provider } = await ensureEmbeddingModel();
 
     const scope: { chatId?: number; projectId?: number } = {};
     if (projectId) scope.projectId = Number(projectId);
@@ -16,14 +16,15 @@ export async function GET(req: Request) {
     const embeddingCount = await getEmbeddingCount(scope);
 
     return new Response(JSON.stringify({
-      available: modelAvailable,
+      available,
+      provider,
       embeddingCount,
     }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
   } catch {
-    return new Response(JSON.stringify({ available: false, embeddingCount: 0 }), {
+    return new Response(JSON.stringify({ available: false, provider: null, embeddingCount: 0 }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
@@ -41,9 +42,9 @@ export async function POST(req: Request) {
       });
     }
 
-    // Check if embedding model is available
-    const modelAvailable = await ensureEmbeddingModel();
-    if (!modelAvailable) {
+    // Check if any embedding provider is available
+    const { available } = await ensureEmbeddingModel();
+    if (!available) {
       return new Response(JSON.stringify({ success: false, reason: 'Embedding model not available' }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
