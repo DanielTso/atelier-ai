@@ -180,7 +180,7 @@ export const MessagesList = memo(function MessagesList({
 
   return (
     <Tooltip.Provider delayDuration={300}>
-      <div className="flex flex-col gap-6 max-w-3xl mx-auto pb-4">
+      <div className="flex flex-col gap-6 max-w-3xl xl:max-w-4xl 2xl:max-w-5xl mx-auto pb-4">
         <AnimatePresence initial={false}>
           {messages.map((m, index) => {
             // Show streaming cursor on last assistant message while loading

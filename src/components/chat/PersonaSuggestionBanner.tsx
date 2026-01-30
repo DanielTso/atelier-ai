@@ -29,7 +29,7 @@ export const PersonaSuggestionBanner = memo(function PersonaSuggestionBanner({
           animate={{ opacity: 1, y: 0, height: 'auto' }}
           exit={{ opacity: 0, y: 10, height: 0 }}
           transition={{ duration: 0.2, ease: 'easeOut' }}
-          className="max-w-3xl mx-auto mb-2"
+          className="max-w-3xl xl:max-w-4xl 2xl:max-w-5xl mx-auto mb-2"
         >
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/10 border border-primary/20 text-sm">
             <Lightbulb className="h-4 w-4 text-primary shrink-0" />

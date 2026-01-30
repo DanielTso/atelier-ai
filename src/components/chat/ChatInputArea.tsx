@@ -179,7 +179,7 @@ export const ChatInputArea = memo(function ChatInputArea({
         </div>
       )}
 
-      <div className="max-w-3xl mx-auto">
+      <div className="max-w-3xl xl:max-w-4xl 2xl:max-w-5xl mx-auto">
         {/* Toolbar row with PersonaSelector, System Prompt button, and Attach button */}
         {activeChatId && (
           <div className="flex items-center gap-2 mb-2 px-1">
