@@ -39,23 +39,26 @@ Next.js 16 App Router chat application with hybrid AI backend (Google Gemini clo
 1. **Client** (`src/app/page.tsx`) — Single-page chat UI using `useChat` from `@ai-sdk/react`. All application state lives here (projects, chats, messages, model selection).
 2. **Server Actions** (`src/app/actions.ts`) — "use server" functions for all DB reads/writes (CRUD for projects, chats, messages, settings).
 3. **API Routes**:
-   - `POST /api/chat` — Streams LLM responses. Routes to Gemini or Ollama based on model name prefix (`gemini` → Google, else → Ollama). Applies context compression (summary + last 20 messages) when summary exists.
+   - `POST /api/chat` — Streams LLM responses. Routes to Gemini or Ollama based on model name prefix (`gemini` → Google, else → Ollama). Applies four-layer context: system prompt → semantic retrieval → summary → recent 20 messages. Gemini models have Google Search grounding enabled automatically.
    - `GET /api/models` — Lists available models from both providers. Caches for 5 minutes.
    - `POST /api/summarize` — Compresses older messages into an LLM-generated summary. Auto-triggers at 30+ messages, keeps last 10 in full detail.
+   - `POST /api/embed` — Async embedding generation via Ollama `nomic-embed-text`. Called after each message exchange (best-effort).
+   - `GET /api/embed` — Returns embedding status (`available`, `embeddingCount`) for a chat or project scope.
+   - `POST /api/classify` — LLM-based conversation topic classification. Triggers after 3+ messages, cached per chat.
 
 ### Component Structure
 
-- `src/components/chat/` — Chat-specific components: `Sidebar` (project/chat navigation, collapsible with icon-only mode), `MessagesList` (markdown rendering with Framer Motion animations), `ChatHeader`, `ChatContextMenu`, `MessageActions`, `CodeBlock`
-- `src/components/ui/` — Reusable UI: `CommandPalette` (Cmd+K), `PersonaSelector` (6 built-in presets), `ModelSelect`, `SettingsDialog` (tabbed settings with API, Appearance, Model Defaults), `SystemPromptDialog`, `RenameDialog`, `DeleteConfirmDialog`, `Toaster` (sonner)
+- `src/components/chat/` — Chat-specific components: `Sidebar` (project/chat navigation, collapsible with icon-only mode, project defaults icon), `MessagesList` (markdown rendering with Framer Motion animations, source URL rendering for grounded responses), `ChatHeader`, `ChatInputArea` (input toolbar with PersonaSelector, system prompt button, semantic memory indicator), `PersonaSuggestionBanner` (smart persona auto-suggestion), `ChatContextMenu`, `MessageActions`, `CodeBlock`
+- `src/components/ui/` — Reusable UI: `CommandPalette` (Cmd+K), `PersonaSelector` (6 built-in presets + 5 model+persona combos, grouped dropdown with Cloud/Local badges), `ModelSelect`, `SettingsDialog` (tabbed settings with API, Appearance, Model Defaults), `ProjectDefaultsDialog` (per-project persona/model defaults with usage stats), `SystemPromptDialog`, `RenameDialog`, `DeleteConfirmDialog`, `Toaster` (sonner)
 - `src/components/settings/` — Settings tab components: `ApiSettingsTab` (Gemini key, Ollama URL + test), `AppearanceSettingsTab` (theme, font size, density), `ModelDefaultsSettingsTab` (default model, system prompt, persona management)
-- `src/hooks/` — `useLocalStorage<T>` (generic localStorage with SSR safety, deferred hydration to avoid mismatch), `usePersonas` (persona management), `useCollapseState` (sidebar section state), `useAppearanceSettings` (font size + message density)
-- `src/lib/` — `utils.ts` (`cn()` via clsx + tailwind-merge), `formatTime.ts` (relative timestamps), `settings.ts` (server-side DB-first/env-fallback settings helper)
+- `src/hooks/` — `useLocalStorage<T>` (generic localStorage with SSR safety, deferred hydration to avoid mismatch), `usePersonas` (persona management with combo presets), `useCollapseState` (sidebar section state), `useAppearanceSettings` (font size + message density), `useSmartDefaults` (three-layer persona suggestion: project defaults → usage patterns → keyword heuristics)
+- `src/lib/` — `utils.ts` (`cn()` via clsx + tailwind-merge), `formatTime.ts` (relative timestamps), `settings.ts` (server-side DB-first/env-fallback settings helper), `embeddings.ts` (Ollama embedding generation, cosine similarity, vector search), `topicDetection.ts` (keyword-based conversation topic heuristics)
 
 ### Database
 
 SQLite with Drizzle ORM. Schema at `src/db/schema.ts`, connection at `src/db/index.ts`.
 
-Four tables: `projects` → `chats` → `messages` (cascade deletes), plus `settings` (key-value store). Key chat fields: `archived` (soft delete), `systemPrompt`, `summary`, `summaryUpToMessageId`. Settings table: `key` (text PK), `value` (text), `updatedAt` (timestamp).
+Seven tables: `projects` → `chats` → `messages` (cascade deletes), `settings` (key-value store), `messageEmbeddings` (vector storage for semantic memory), `personaUsage` (persona/model tracking), `chatTopics` (detected conversation topics). Key chat fields: `archived` (soft delete), `systemPrompt`, `summary`, `summaryUpToMessageId`. Key project fields: `defaultPersonaId`, `defaultModel`. Settings table: `key` (text PK), `value` (text), `updatedAt` (timestamp).
 
 ### State Management
 
@@ -73,9 +76,31 @@ Tailwind CSS v4 with a glassmorphism design system. Key patterns:
 - Animations via Framer Motion (message entrance) and CSS keyframes (streaming cursor)
 - Radix UI primitives for accessible dialogs, dropdowns, selects, tooltips
 
-### Context Summarization
+### Context Management
 
-Auto-summarization triggers at 30+ messages. The summarizer compresses older messages into an LLM-generated summary and keeps the last 10 messages in full. When a summary exists, `/api/chat` sends: system prompt + summary (as synthetic messages) + last 20 recent messages. System prompts are never trimmed.
+The `/api/chat` route builds context using four layers (in order):
+1. **System prompt** — Always included, never trimmed
+2. **Semantic retrieval** — Embeds the latest user message via Ollama `nomic-embed-text`, finds top-5 similar past messages (cosine similarity ≥ 0.7) scoped to the current project. Injected as synthetic user/assistant context messages.
+3. **Summary** — Compressed older messages (auto-triggers at 30+ messages, keeps last 10 in full)
+4. **Recent messages** — Last 20 messages in full detail
+
+All layers degrade gracefully. If Ollama is offline, semantic retrieval is silently skipped.
+
+### Google Search Grounding
+
+Gemini models automatically have Google Search enabled via `google.tools.googleSearch({})` passed to `streamText()`. The model decides when to search based on the query. Sources are streamed to the client via `toUIMessageStreamResponse({ sendSources: true })` and rendered as clickable link chips (with globe icon and "SOURCES" label) below assistant messages in `MessagesList`. Source parts have type `source-url` with `sourceId`, `url`, and optional `title`.
+
+### Semantic Memory (Embeddings)
+
+Messages are embedded asynchronously after each exchange via `POST /api/embed`. The pipeline:
+1. Client calls `/api/embed` with `{ messageId, chatId, projectId, content }` in the `onFinish` callback
+2. Server checks `ensureEmbeddingModel()` — verifies `nomic-embed-text` is available in Ollama
+3. Generates 768-dim float vector via Ollama's `/api/embeddings` endpoint
+4. Stores as JSON-serialized array in `message_embeddings` table
+
+Retrieval uses brute-force cosine similarity (fast up to ~50K vectors). The `ChatInputArea` toolbar shows a brain icon indicator: green with embedding count when active, gray "Memory off" when Ollama/model unavailable.
+
+**Requires**: `ollama pull nomic-embed-text` (runtime setup, not a package dependency).
 
 ## Settings System
 
@@ -128,11 +153,21 @@ const { messages, sendMessage, status, setMessages } = useChat({ transport })
 
 ```typescript
 import { streamText, convertToModelMessages, type UIMessage } from 'ai';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
 
 // UIMessage → ModelMessage conversion required
 const modelMessages = await convertToModelMessages(messages as UIMessage[]);
-const result = streamText({ model: selectedModel, messages: modelMessages });
-return result.toUIMessageStreamResponse();
+
+// Gemini models get Google Search grounding via provider-defined tools
+const google = createGoogleGenerativeAI({ apiKey });
+const googleTools = { google_search: google.tools.googleSearch({}) };
+
+const result = streamText({
+  model: selectedModel,
+  messages: modelMessages,
+  tools: googleTools, // only for Gemini models
+});
+return result.toUIMessageStreamResponse({ sendSources: true });
 ```
 
 ### Message Format
@@ -154,9 +189,12 @@ const text = message.parts
 
 1. **Stale closure in transport body**: Use a `ref` for dynamic values like selected model
 2. **Message format mismatch**: Use `convertToModelMessages()` on the server
-3. **Response format**: Use `toUIMessageStreamResponse()` not `toTextStreamResponse()`
+3. **Response format**: Use `toUIMessageStreamResponse({ sendSources: true })` to include Google Search source URLs in the stream
 4. **Ollama provider**: Use `baseURL` (not `baseUrl`) in `createOllama()`
 5. **better-sqlite3**: Must be listed in `serverExternalPackages` in `next.config.ts`
+6. **Google Search tool name**: Must be exactly `google_search` in the `tools` object — this is a provider requirement
+7. **AI SDK v6 naming**: Use `maxOutputTokens` (not `maxTokens`) in `generateText()`/`streamText()` options
+8. **Source parts**: Google Search grounding sends `source-url` parts in `message.parts[]` alongside `text` parts. Deduplicate by URL before rendering.
 
 ## Testing
 
@@ -181,7 +219,7 @@ vi.mock('@/db', () => ({
 beforeEach(() => { createTestDb() }) // Fresh DB per test
 ```
 
-**API route tests** require `vi.resetModules()` + `vi.doMock()` + dynamic `import()` to re-register mocks after module reset. Must mock `@/lib/settings` alongside AI SDK providers and `@/db`.
+**API route tests** require `vi.resetModules()` + `vi.doMock()` + dynamic `import()` to re-register mocks after module reset. Must mock `@/lib/settings`, `@/lib/embeddings`, and AI SDK providers alongside `@/db`. The `@ai-sdk/google` mock must include `tools.googleSearch` on the provider function for the chat route's grounding support.
 
 ### Playwright (E2E)
 
