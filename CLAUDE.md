@@ -8,9 +8,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm install          # Install dependencies
 npm run dev          # Start development server (http://localhost:3000)
 npm run build        # Production build
+npm run start        # Run production server
 npm run lint         # Run ESLint
 npx drizzle-kit push # Push schema changes to SQLite database
 ```
+
+No test framework is configured. Path alias: `@/*` → `./src/*`.
 
 ## Environment Setup
 
@@ -19,119 +22,92 @@ Create `.env.local` with:
 GOOGLE_GENERATIVE_AI_API_KEY=your_key_here
 ```
 
-For local models, run Ollama: `ollama serve`
+For local models, run Ollama: `ollama serve` (default port 11434). Both providers are optional — the app works with either or both.
 
 ## Architecture Overview
 
-This is a **Next.js 16 App Router** chat application with a hybrid AI backend (Google Gemini + Ollama local models).
+Next.js 16 App Router chat application with hybrid AI backend (Google Gemini cloud + Ollama local models). Local-first design — all data stored in SQLite (`sqlite.db`).
 
 ### Data Flow
 
-1. **Client** (`src/app/page.tsx`) - Main chat interface using `@ai-sdk/react`'s `useChat` hook
-2. **Server Actions** (`src/app/actions.ts`) - Database operations for projects, chats, and messages
+1. **Client** (`src/app/page.tsx`) — Single-page chat UI using `useChat` from `@ai-sdk/react`. All application state lives here (projects, chats, messages, model selection).
+2. **Server Actions** (`src/app/actions.ts`) — "use server" functions for all DB reads/writes (CRUD for projects, chats, messages).
 3. **API Routes**:
-   - `/api/chat` - Streaming LLM responses via Vercel AI SDK's `streamText`
-   - `/api/models` - Returns available models (Gemini + local Ollama models)
-   - `/api/summarize` - LLM-generated conversation summaries for context compression
-
-### Database Layer
-
-- **SQLite** with **Drizzle ORM**
-- Schema: `src/db/schema.ts` - Three tables: `projects`, `chats`, `messages`
-- DB connection: `src/db/index.ts`
-- Schema migrations: `npx drizzle-kit push`
-
-**Chats table includes:**
-- `archived` (boolean) - Soft delete flag
-- `systemPrompt` (text) - Custom system instructions
-- `summary` (text) - LLM-generated conversation summary
-- `summaryUpToMessageId` (integer) - Last message ID included in summary
+   - `POST /api/chat` — Streams LLM responses. Routes to Gemini or Ollama based on model name prefix (`gemini` → Google, else → Ollama). Applies context compression (summary + last 20 messages) when summary exists.
+   - `GET /api/models` — Lists available models from both providers. Caches for 5 minutes.
+   - `POST /api/summarize` — Compresses older messages into an LLM-generated summary. Auto-triggers at 30+ messages, keeps last 10 in full detail.
 
 ### Component Structure
 
-```
-src/components/chat/
-├── Sidebar.tsx           # Project/chat navigation with collapse persistence
-├── ChatHeader.tsx        # Model selector, persona selector, chat title editing
-├── ChatContextMenu.tsx   # 3-dot dropdown with Move/Rename/Archive/Delete
-├── MessagesList.tsx      # Renders chat messages with markdown and streaming cursor
-├── CodeBlock.tsx         # Syntax-highlighted code blocks with copy button
-└── LoadingSkeletons.tsx
+- `src/components/chat/` — Chat-specific components: `Sidebar` (project/chat navigation, 415 lines), `MessagesList` (markdown rendering with Framer Motion animations), `ChatHeader`, `ChatContextMenu`, `MessageActions`, `CodeBlock`
+- `src/components/ui/` — Reusable UI: `CommandPalette` (Cmd+K), `PersonaSelector` (6 built-in presets), `ModelSelect`, `SystemPromptDialog`, `RenameDialog`, `DeleteConfirmDialog`, `Toaster` (sonner)
+- `src/hooks/` — `useLocalStorage<T>` (generic localStorage with SSR safety), `usePersonas` (persona management), `useCollapseState` (sidebar state)
+- `src/lib/` — `utils.ts` (`cn()` via clsx + tailwind-merge), `formatTime.ts` (relative timestamps)
 
-src/components/ui/
-├── ModelSelect.tsx       # Model dropdown with Cloud/Local grouping
-├── PersonaSelector.tsx   # Persona/system prompt quick switcher
-├── DeleteConfirmDialog.tsx # Confirmation modal for deletions
-├── RenameDialog.tsx      # Dialog for renaming chats
-└── SystemPromptDialog.tsx # Dialog for editing system instructions
+### Database
 
-src/hooks/
-├── useLocalStorage.ts    # Generic localStorage hook with SSR safety
-├── useCollapseState.ts   # Sidebar collapse state with persistence
-└── usePersonas.ts        # Persona presets management
-```
+SQLite with Drizzle ORM. Schema at `src/db/schema.ts`, connection at `src/db/index.ts`.
 
-### AI Provider Selection
+Three tables: `projects` → `chats` → `messages` (cascade deletes). Key chat fields: `archived` (soft delete), `systemPrompt`, `summary`, `summaryUpToMessageId`.
 
-In `src/app/api/chat/route.ts`:
-- Models starting with `gemini` → Google Generative AI provider
-- All other models → Ollama provider (localhost:11434)
+### State Management
 
-### Key Dependencies
+- **Server state**: SQLite via server actions
+- **UI persistence**: `useLocalStorage` hook (sidebar collapse, custom personas)
+- **Theme**: `next-themes` with class-based dark/light switching
+- **Refs for closures**: Dynamic values (selectedModel, activeChatId) use `useRef` to avoid stale closures in `useChat` transport
 
-- **Vercel AI SDK v6** (`ai@^6.0`, `@ai-sdk/react@^3.0`) - Streaming chat
-- **ai-sdk-ollama** - Ollama integration
-- **Drizzle ORM** - Type-safe database queries
-- **react-markdown** + **remark-gfm** - Markdown rendering
-- **next-themes** - Dark/light mode
+### Styling
+
+Tailwind CSS v4 with a glassmorphism design system. Key patterns:
+- Glass panels: `bg-background/60 backdrop-blur-xl` (defined as `.glass-panel` in `globals.css`)
+- Design tokens as CSS custom properties in `globals.css` (HSL format, light/dark variants)
+- Animations via Framer Motion (message entrance) and CSS keyframes (streaming cursor)
+- Radix UI primitives for accessible dialogs, dropdowns, selects, tooltips
+
+### Context Summarization
+
+Auto-summarization triggers at 30+ messages. The summarizer compresses older messages into an LLM-generated summary and keeps the last 10 messages in full. When a summary exists, `/api/chat` sends: system prompt + summary (as synthetic messages) + last 20 recent messages. System prompts are never trimmed.
 
 ## AI SDK v6 Implementation Details
 
 ### Client-Side (`useChat` hook)
 
-The SDK v6 uses a different API than earlier versions:
-
 ```typescript
-// Transport handles API communication
+// Transport with ref-based dynamic body to avoid stale closures
 const transport = useMemo(() => new DefaultChatTransport({
   api: '/api/chat',
-  body: () => ({ model: selectedModelRef.current }), // Use ref to avoid stale closure
+  body: () => ({ model: selectedModelRef.current }),
 }), [])
 
 const { messages, sendMessage, status, setMessages } = useChat({ transport })
 ```
 
-**Key differences from older SDK:**
-- No `input`, `handleInputChange`, `handleSubmit` - manage input state yourself
-- No `isLoading` - use `status === 'streaming' || status === 'submitted'`
-- Messages use `parts` array instead of `content` string
-- Use `sendMessage({ text: input })` to send messages
+**SDK v6 differences from older versions:**
+- No `input`, `handleInputChange`, `handleSubmit` — manage input state yourself
+- No `isLoading` — use `status === 'streaming' || status === 'submitted'`
+- Messages use `parts` array, not `content` string
+- Send with `sendMessage({ text })`, not form submission
 
 ### Server-Side (`/api/chat`)
 
 ```typescript
 import { streamText, convertToModelMessages, type UIMessage } from 'ai';
 
-// Client sends UIMessage format, streamText needs ModelMessage format
+// UIMessage → ModelMessage conversion required
 const modelMessages = await convertToModelMessages(messages as UIMessage[]);
-
-const result = streamText({
-  model: selectedModel,
-  messages: modelMessages,
-});
-
-// Use toUIMessageStreamResponse() for new SDK client
+const result = streamText({ model: selectedModel, messages: modelMessages });
 return result.toUIMessageStreamResponse();
 ```
 
 ### Message Format
 
-**UIMessage (client-side):**
+UIMessage (client-side):
 ```typescript
 { id: string, role: 'user' | 'assistant', parts: [{ type: 'text', text: string }] }
 ```
 
-**Extract text from UIMessage:**
+Extract text:
 ```typescript
 const text = message.parts
   .filter((part): part is { type: 'text'; text: string } => part.type === 'text')
@@ -145,3 +121,4 @@ const text = message.parts
 2. **Message format mismatch**: Use `convertToModelMessages()` on the server
 3. **Response format**: Use `toUIMessageStreamResponse()` not `toTextStreamResponse()`
 4. **Ollama provider**: Use `baseURL` (not `baseUrl`) in `createOllama()`
+5. **better-sqlite3**: Must be listed in `serverExternalPackages` in `next.config.ts`
