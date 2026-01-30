@@ -76,5 +76,22 @@
 - [x] Implement alphabetical sorting for projects.
 - [x] **Test:** Persona switching, streaming cursor, project management.
 
+### Phase 8: Settings & Collapsible Sidebar
+**Goal:** Full settings management with DB-backed configuration and collapsible sidebar.
+- [x] Add SQLite `settings` key-value table (key PK, value, updatedAt).
+- [x] Add settings CRUD server actions (`getSetting`, `getSettings`, `setSetting`, `setSettings`).
+- [x] Create server-side settings helper with DB-first / env-fallback pattern.
+- [x] Migrate API routes to per-request provider creation (no more module-level singletons).
+- [x] Build Settings dialog with three tabs:
+  - **API & Providers:** Gemini API key (password field), Ollama URL with Test Connection button.
+  - **Appearance:** Theme cards (Light/Dark/System), font size, message density.
+  - **Model Defaults:** Default model selector, default system prompt, persona management.
+- [x] Implement collapsible sidebar (icon-only strip with tooltips when collapsed, localStorage-persisted).
+- [x] Wire settings dialog and sidebar collapse into main page.
+- [x] Fix message timestamps (include `createdAt` from DB in UIMessage mapping).
+- [x] Fix `useLocalStorage` hydration mismatch (defer localStorage read to `useEffect`).
+- [x] Update test mocks for per-request provider pattern.
+- [x] **Test:** Settings persist in DB, env fallback works, sidebar collapses/expands, timestamps display correctly, all 76 tests pass.
+
 ## Status
 All planned phases complete. Ready for production use.

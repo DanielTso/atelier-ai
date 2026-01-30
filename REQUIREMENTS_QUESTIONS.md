@@ -30,3 +30,14 @@ Since this is a local tool, we need to decide where to save your "Projects" and 
 ## 4. Visual Design (Glassmorphism)
 Glassmorphism relies heavily on background images or gradients to show the "blur" effect.
 *   **Question:** Do you have a preferred color scheme (e.g., Dark Mode with Neon accents, Soft Pastels, or specific Wallpaper)?
+
+---
+
+## Resolved Outcomes
+
+The above questions were addressed during development. Key decisions:
+
+1. **Tech Stack:** Next.js App Router approved and implemented (now Next.js 16).
+2. **Data Persistence:** Neither Option A nor B — chose **SQLite with Drizzle ORM** for robust local storage. Settings use a **hybrid approach**: server-accessible config (API keys, provider URLs) in SQLite with env-var fallback, client-only preferences (theme, font size, sidebar state) in localStorage.
+3. **Ollama Configuration:** Ollama runs at `localhost:11434` by default. The base URL is now configurable via the Settings dialog (stored in SQLite).
+4. **Visual Design:** Dark mode with glassmorphism aesthetic implemented. Theme switching (Dark/Light/System) available in the Settings Appearance tab via `next-themes`.
