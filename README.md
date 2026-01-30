@@ -7,6 +7,7 @@ A beautiful, local-first AI chat interface built with Next.js, Tailwind CSS, and
 - **Privacy:** Chats are stored locally in a SQLite database (`sqlite.db`).
 - **Organization:** Group chats into Projects with rename and alphabetical sorting.
 - **Chat Management:** Context menus for move, rename, archive, and delete operations.
+- **Auto-Titles:** Chat titles are automatically generated after the first AI response using the same LLM.
 - **Persona System:** Quick persona switching with 6 built-in presets and custom system prompts.
 - **Context Management:** Hybrid summarization for long conversations (auto-triggers at 30+ messages).
 - **Archive System:** Soft-delete chats with restore capability.
@@ -48,7 +49,7 @@ npm run test:e2e     # Run E2E tests (Playwright + Chromium)
 npm run test:all     # Run all tests
 ```
 
-- **Vitest:** 75 unit/integration tests covering utilities, server actions, API routes, and React hooks. Uses in-memory SQLite for isolated DB tests.
+- **Vitest:** 104 unit/integration tests covering utilities, server actions, API routes, and React hooks. Uses in-memory SQLite for isolated DB tests.
 - **Playwright:** 8 E2E tests covering chat flow, project management, and command palette.
 
 ## Tech Stack

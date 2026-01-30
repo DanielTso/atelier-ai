@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0] - 2026-01-30
+
+### Auto-Title Generation
+- **Auto-Title:** New chats automatically receive a descriptive title (3-6 words) after the first AI response. Uses the same LLM that handled the conversation. Replaces "New Chat" in the sidebar without user intervention.
+- **Best-Effort:** Title generation is fire-and-forget — failures silently keep "New Chat" as the fallback title.
+- **API Endpoint:** `POST /api/generate-title` with same provider routing pattern (Gemini/Qwen/Ollama).
+- **Closure Safety:** Added `chatsRef` and `standaloneChatsRef` refs to avoid stale closures in the `onFinish` callback.
+
+### New Files
+- `src/app/api/generate-title/route.ts` — LLM-based title generation endpoint
+- `tests/unit/api/generate-title-route.test.ts` — 6 unit tests for the endpoint
+
 ## [1.1.0] - 2026-01-29
 
 ### Google Search Grounding

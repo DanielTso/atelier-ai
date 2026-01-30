@@ -64,6 +64,7 @@ Next.js 16 App Router chat application with hybrid AI backend (Google Gemini clo
    - `POST /api/summarize` — Compresses older messages into an LLM-generated summary. Auto-triggers at 30+ messages, keeps last 10 in full detail.
    - `POST /api/embed` — Async embedding generation via Ollama `nomic-embed-text` or Gemini `text-embedding-004` (cloud fallback). Called after each message exchange (best-effort).
    - `GET /api/embed` — Returns embedding status (`available`, `provider`, `embeddingCount`) for a chat or project scope.
+   - `POST /api/generate-title` — Auto-generates a concise chat title (3-6 words) after the first AI response. Uses the same provider routing as other routes. Best-effort, fires once when message count reaches 2 and title is still "New Chat".
    - `POST /api/classify` — LLM-based conversation topic classification. Triggers after 3+ messages, cached per chat.
 
 ### Component Structure
@@ -86,7 +87,7 @@ Seven tables: `projects` → `chats` → `messages` (cascade deletes), `settings
 - **Server-accessible settings**: API keys, Ollama URL, default model/prompt stored in `settings` table via `src/lib/settings.ts` (DB-first, env-fallback)
 - **UI persistence**: `useLocalStorage` hook (sidebar collapse, custom personas, font size, message density). Uses deferred hydration — initializes with default value, reads localStorage in `useEffect` to avoid SSR hydration mismatch
 - **Theme**: `next-themes` with class-based dark/light/system switching (configurable in Settings dialog)
-- **Refs for closures**: Dynamic values (selectedModel, activeChatId) use `useRef` to avoid stale closures in `useChat` transport
+- **Refs for closures**: Dynamic values (selectedModel, activeChatId, chats, standaloneChats) use `useRef` to avoid stale closures in `useChat` transport and `onFinish` callback
 
 ### Styling
 
@@ -141,7 +142,7 @@ getDefaultSystemPrompt() // DB 'default-system-prompt'
 ```
 
 ### API Route Provider Creation
-All API routes (`chat`, `models`, `summarize`) create providers **per-request** using the settings helper rather than module-level singletons. This allows runtime configuration changes without server restart. Provider routing uses model name prefixes: `gemini` → `@ai-sdk/google`, `qwen` → `@ai-sdk/openai` (DashScope), else → `ai-sdk-ollama`.
+All API routes (`chat`, `models`, `summarize`, `generate-title`) create providers **per-request** using the settings helper rather than module-level singletons. This allows runtime configuration changes without server restart. Provider routing uses model name prefixes: `gemini` → `@ai-sdk/google`, `qwen` → `@ai-sdk/openai` (DashScope), else → `ai-sdk-ollama`.
 
 ### Settings Dialog
 Three tabs accessed via sidebar Settings button:
@@ -231,7 +232,7 @@ Config: `vitest.config.ts`. Tests in `tests/`. Node environment by default; hook
 **Test structure:**
 - `tests/unit/lib/` — Utility tests (`cn()`, `formatMessageTime`, `formatFullTime`)
 - `tests/unit/actions/` — Server action tests (projects, chats, messages, context). Use in-memory SQLite via `tests/helpers/test-db.ts`
-- `tests/unit/api/` — API route tests (models, chat, summarize). Mock AI SDK providers
+- `tests/unit/api/` — API route tests (models, chat, summarize, generate-title). Mock AI SDK providers
 - `tests/hooks/` — React hook tests (`useLocalStorage`, `usePersonas`, `useCollapseState`). jsdom environment
 
 **In-memory SQLite pattern:**

@@ -93,5 +93,14 @@
 - [x] Update test mocks for per-request provider pattern.
 - [x] **Test:** Settings persist in DB, env fallback works, sidebar collapses/expands, timestamps display correctly, all 76 tests pass.
 
+### Phase 9: Auto-Title Generation
+**Goal:** Automatically generate descriptive chat titles after the first AI response.
+- [x] Create `POST /api/generate-title` endpoint with same provider routing pattern.
+- [x] Add auto-title trigger in `onFinish` callback (fires when messageCount === 2 and title === "New Chat").
+- [x] Add `chatsRef` and `standaloneChatsRef` refs to avoid stale closures.
+- [x] Update sidebar and header state after title generation.
+- [x] Add 6 unit tests for the endpoint.
+- [x] **Test:** New chat → send message → AI responds → sidebar title updates from "New Chat" to a descriptive label.
+
 ## Status
 All planned phases complete. Ready for production use.
