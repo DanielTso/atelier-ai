@@ -58,7 +58,7 @@ Atelier AI is a Next.js 16 App Router chat application with hybrid AI backend (G
 
 ### Data Flow
 
-1. **Client** (`src/app/page.tsx`) — Single-page chat UI using `useChat` from `@ai-sdk/react`. All application state lives here (projects, chats, messages, model selection). Three main view states: **active chat** (full chat UI with header, messages, input), **project landing page** (two-column layout: chats on left, files panel on right with document cards/progress), **empty state** (centered Atelier AI logo/branding with always-visible input toolbar). Typing in the empty state auto-creates a standalone quick chat on send.
+1. **Client** (`src/app/page.tsx`) — Single-page chat UI using `useChat` from `@ai-sdk/react`. All application state lives here (projects, chats, messages, model selection, attached images). Three main view states: **active chat** (full chat UI with header, messages, input), **project landing page** (two-column layout: chats on left, files panel on right with document cards/progress), **empty state** (centered Atelier AI logo/branding with always-visible input toolbar). Typing in the empty state auto-creates a standalone quick chat on send. Supports multimodal image input — images are sent as `FileUIPart` parts via `sendMessage({ text, files })` and persisted in a `message_attachments` DB table for reload.
 2. **Server Actions** (`src/app/actions.ts`) — "use server" functions for all DB reads/writes (CRUD for projects, chats, messages, settings, chat previews).
 3. **API Routes**:
    - `POST /api/chat` — Streams LLM responses. Routes to provider based on model name prefix (`gemini` → Google, `qwen` → DashScope, else → Ollama). Applies five-layer context: system prompt → document chunks → semantic retrieval → summary → recent 20 messages. Gemini models have Google Search grounding enabled automatically.
@@ -74,17 +74,17 @@ Atelier AI is a Next.js 16 App Router chat application with hybrid AI backend (G
 
 ### Component Structure
 
-- `src/components/chat/` — Chat-specific components: `Sidebar` (project/chat navigation, collapsible with icon-only mode, "Smart Chat" dropdown for quick/project chat creation, project defaults + documents icons), `MessagesList` (markdown rendering with Framer Motion animations, source URL rendering for grounded responses), `SmoothStreamingWrapper` (ResizeObserver-based smooth height transitions during streaming), `ChatHeader` (title-only, editable inline), `ChatInputArea` (always-visible input toolbar with ModelSelect, PersonaSelector, system prompt button, attach button, semantic memory indicator), `ProjectLandingPage` (two-column project view: chat list left, files panel right with document cards, progress bar, indexing status; fetches documents internally via `/api/documents`), `PersonaSuggestionBanner` (smart persona auto-suggestion), `ChatContextMenu`, `MessageActions`, `CodeBlock`
+- `src/components/chat/` — Chat-specific components: `Sidebar` (project/chat navigation, collapsible with icon-only mode, "Smart Chat" dropdown for quick/project chat creation, project defaults + documents icons), `MessagesList` (markdown rendering with Framer Motion animations, source URL rendering for grounded responses, inline image display from `FileUIPart` parts), `SmoothStreamingWrapper` (ResizeObserver-based smooth height transitions during streaming), `ChatHeader` (title-only, editable inline), `ChatInputArea` (always-visible input toolbar with ModelSelect, PersonaSelector, system prompt button, attach button, semantic memory indicator; supports image upload/paste/drag-drop with 80×80 thumbnail previews), `ProjectLandingPage` (two-column project view: chat list left, files panel right with document cards, progress bar, indexing status; fetches documents internally via `/api/documents`), `PersonaSuggestionBanner` (smart persona auto-suggestion), `ChatContextMenu`, `MessageActions`, `CodeBlock`
 - `src/components/ui/` — Reusable UI: `CommandPalette` (Cmd+K), `PersonaSelector` (6 built-in presets + 5 model+persona combos, grouped dropdown with Cloud/Local badges), `ModelSelect`, `SettingsDialog` (tabbed settings with API, Appearance, Model Defaults), `ProjectDefaultsDialog` (per-project persona/model defaults with usage stats), `ProjectDocumentsDialog` (upload, list, delete project documents for RAG), `DocumentPreviewDialog` (read-only document preview showing full extracted text from chunks, with overlap deduplication), `SystemPromptDialog`, `RenameDialog`, `CreateProjectDialog` (styled Radix dialog replacing native `prompt()`), `DeleteConfirmDialog`, `Toaster` (sonner)
 - `src/components/settings/` — Settings tab components: `ApiSettingsTab` (Gemini key, DashScope key, Ollama URL + test), `AppearanceSettingsTab` (theme, font size, density), `ModelDefaultsSettingsTab` (default model, system prompt, persona management)
 - `src/hooks/` — `useLocalStorage<T>` (generic localStorage with SSR safety, deferred hydration to avoid mismatch), `usePersonas` (persona management with combo presets), `useCollapseState` (sidebar section state), `useAppearanceSettings` (font size + message density), `useSmartDefaults` (three-layer persona suggestion: project defaults → usage patterns → keyword heuristics)
-- `src/lib/` — `utils.ts` (`cn()` via clsx + tailwind-merge), `formatTime.ts` (relative timestamps), `fileUtils.ts` (shared `formatFileSize()` + `getFileTypeBadge()` used by `ProjectDocumentsDialog` and `ProjectLandingPage`), `settings.ts` (server-side DB-first/env-fallback settings helper), `embeddings.ts` (hybrid Ollama/Gemini embedding generation, cosine similarity, vector search for messages + document chunks), `chunking.ts` (overlapping sentence-aware text chunker for document RAG), `topicDetection.ts` (keyword-based conversation topic heuristics)
+- `src/lib/` — `utils.ts` (`cn()` via clsx + tailwind-merge), `formatTime.ts` (relative timestamps), `fileUtils.ts` (shared `formatFileSize()` + `getFileTypeBadge()` used by `ProjectDocumentsDialog` and `ProjectLandingPage`), `fileAttachments.ts` (text file attachment format + image utilities: `AttachedImage` interface, `isImageFile()`, `fileToAttachedImage()` for client-side FileReader conversion), `settings.ts` (server-side DB-first/env-fallback settings helper), `embeddings.ts` (hybrid Ollama/Gemini embedding generation, cosine similarity, vector search for messages + document chunks), `chunking.ts` (overlapping sentence-aware text chunker for document RAG), `topicDetection.ts` (keyword-based conversation topic heuristics)
 
 ### Database
 
 SQLite via libSQL (`@libsql/client`) with Drizzle ORM (`drizzle-orm/libsql`). Schema at `src/db/schema.ts`, connection at `src/db/index.ts`. Uses `file:sqlite.db` locally, `TURSO_DATABASE_URL` on Vercel. Drizzle config (`drizzle.config.ts`) uses `dialect: "turso"`.
 
-Nine tables: `projects` → `chats` → `messages` (cascade deletes), `settings` (key-value store), `messageEmbeddings` (vector storage for semantic memory), `documents` (uploaded files per project), `documentChunks` (chunked text with 768-dim embeddings for document RAG), `personaUsage` (persona/model tracking), `chatTopics` (detected conversation topics). Key chat fields: `archived` (soft delete), `systemPrompt`, `summary`, `summaryUpToMessageId`. Key project fields: `defaultPersonaId`, `defaultModel`. Key document fields: `projectId`, `filename`, `mimeType`, `fileSize`, `charCount`, `chunkCount`, `status` ('processing'|'ready'|'error'). Key chunk fields: `documentId`, `projectId`, `chunkIndex`, `content`, `embedding` (nullable JSON 768-dim vector). Settings table: `key` (text PK), `value` (text), `updatedAt` (timestamp).
+Ten tables: `projects` → `chats` → `messages` (cascade deletes), `settings` (key-value store), `messageEmbeddings` (vector storage for semantic memory), `documents` (uploaded files per project), `documentChunks` (chunked text with 768-dim embeddings for document RAG), `messageAttachments` (multimodal image/file attachments per message), `personaUsage` (persona/model tracking), `chatTopics` (detected conversation topics). Key chat fields: `archived` (soft delete), `systemPrompt`, `summary`, `summaryUpToMessageId`. Key project fields: `defaultPersonaId`, `defaultModel`. Key document fields: `projectId`, `filename`, `mimeType`, `fileSize`, `charCount`, `chunkCount`, `status` ('processing'|'ready'|'error'). Key chunk fields: `documentId`, `projectId`, `chunkIndex`, `content`, `embedding` (nullable JSON 768-dim vector). Key attachment fields: `messageId`, `chatId`, `filename`, `mediaType`, `dataUrl` (base64 data URL), `fileSize`. Settings table: `key` (text PK), `value` (text), `updatedAt` (timestamp).
 
 ### State Management
 
@@ -156,6 +156,30 @@ Project-scoped document upload and retrieval-augmented generation. Users upload 
 - `ProjectDocumentsDialog`: Drag-drop upload zone, document list with file type badges, size, chunk count, status icons (spinner/check/error), delete buttons. Footer shows total chunks indexed. Opened from sidebar `FileText` icon or "Upload documents for RAG" link.
 - `DocumentPreviewDialog`: Read-only preview of a document's extracted text. Fetches chunks via `getDocumentChunks(documentId)` server action, deduplicates the 400-char overlap between consecutive chunks, and renders the reconstructed text in a scrollable monospace view. Opened by clicking a file card on the `ProjectLandingPage`.
 
+### Multimodal Image Input
+
+Users can attach images to chat messages via three methods: click the Attach button (accepts PNG, JPG, GIF, WebP alongside text files), paste from clipboard (Ctrl+V), or drag-and-drop onto the input area. Max 10MB per image; oversized files show a toast error.
+
+**Client-side flow**:
+1. `ChatInputArea` splits incoming files via `isImageFile()` — images are read client-side via `fileToAttachedImage()` (FileReader → data URL), text files go through server-side `/api/extract` as before
+2. Image thumbnails (80×80, object-cover) render above the textarea with filename overlay and remove button
+3. On send, `page.tsx` builds `FileUIPart[]` from `attachedImages` state and calls `sendMessage({ text, files: fileParts })`
+4. Images are captured in `pendingImagesRef` before state clears, then saved to `message_attachments` DB table after the user message is persisted (via the existing `saveMessage` → `useEffect` flow)
+
+**Persistence**:
+- `saveMessageAttachments(messageId, chatId, attachments[])` — server action, stores each image as a row with `filename`, `mediaType`, `dataUrl` (full base64), `fileSize`
+- `getChatAttachments(chatId)` — server action, loads all attachments for a chat
+- `loadMessages()` fetches attachments in parallel with messages, groups by `messageId`, and appends `{ type: 'file', mediaType, url }` parts to the UIMessage `parts` array
+
+**Display**: `MessagesList` extracts `file` parts with `image/*` media types via `getMessageImages()` and renders them as clickable inline images (max 300×300, `object-contain`) inside user message bubbles, before text content and file chips. Clicking opens the full image in a new tab.
+
+**Server-side**: The `/api/chat` route requires **no changes** — `convertToModelMessages()` from AI SDK v6 natively converts `FileUIPart` data URLs into the correct provider format (inline base64 for Gemini/Qwen).
+
+**Provider compatibility**:
+- **Gemini**: Full native vision support
+- **Qwen**: Full vision support via DashScope OpenAI-compatible API
+- **Ollama**: Model-dependent — multimodal models (llava, bakllava) work; text-only models will error
+
 ## Settings System
 
 ### Storage Strategy
@@ -208,7 +232,7 @@ When a user clicks a project in the sidebar (without selecting a chat), the main
 Chat previews are fetched via `getProjectChatPreviews(projectId)` server action and refresh after create/delete/rename/move operations.
 
 ### Input Toolbar
-The `ChatInputArea` toolbar (ModelSelect, PersonaSelector, System Prompt, Attach, semantic memory indicator) is **always visible** — including the empty state with no active chat. The model selector was moved from `ChatHeader` to the input toolbar so it's accessible before starting a conversation. The textarea is always enabled; sending a message with no active chat auto-creates a standalone quick chat.
+The `ChatInputArea` toolbar (ModelSelect, PersonaSelector, System Prompt, Attach, semantic memory indicator) is **always visible** — including the empty state with no active chat. The model selector was moved from `ChatHeader` to the input toolbar so it's accessible before starting a conversation. The textarea is always enabled; sending a message with no active chat auto-creates a standalone quick chat. The Attach button accepts both text documents and images (PNG, JPG, GIF, WebP). Pasting an image from clipboard (Ctrl+V) or dragging an image onto the input area also attaches it. Image thumbnails appear in a grid above the textarea; text file chips appear below.
 
 ## AI SDK v6 Implementation Details
 
@@ -255,7 +279,14 @@ return result.toUIMessageStreamResponse({ sendSources: true });
 
 UIMessage (client-side):
 ```typescript
+// Text-only message
 { id: string, role: 'user' | 'assistant', parts: [{ type: 'text', text: string }] }
+
+// Multimodal message (text + images)
+{ id: string, role: 'user', parts: [
+  { type: 'text', text: string },
+  { type: 'file', mediaType: 'image/png', url: 'data:image/png;base64,...' },
+] }
 ```
 
 Extract text:
@@ -264,6 +295,14 @@ const text = message.parts
   .filter((part): part is { type: 'text'; text: string } => part.type === 'text')
   .map(part => part.text)
   .join('');
+```
+
+Send with images:
+```typescript
+const fileParts: FileUIPart[] = images.map(img => ({
+  type: 'file' as const, mediaType: img.mediaType, url: img.dataUrl,
+}))
+await sendMessage({ text: userMessage, files: fileParts })
 ```
 
 ### Common Gotchas
@@ -279,6 +318,7 @@ const text = message.parts
 9. **DashScope provider**: Uses `@ai-sdk/openai` with `createOpenAI({ baseURL: 'https://dashscope-us.aliyuncs.com/compatible-mode/v1', apiKey })`. Must use `.chat(modelName)` (not `provider(modelName)`) to hit the Chat Completions endpoint — the default Responses API (`/responses`) is not supported by DashScope.
 10. **Qwen model prefix**: Use `startsWith('qwen')` (not `startsWith('qwen-')`) to match both `qwen-flash`/`qwen-plus` and `qwen3-max`/`qwen3-coder-plus` naming patterns.
 11. **DashScope regions**: API keys are region-specific. The hardcoded base URL uses US Virginia (`dashscope-us.aliyuncs.com`). Singapore uses `dashscope-intl.aliyuncs.com`, Beijing uses `dashscope.aliyuncs.com` — keys are not interchangeable between regions.
+12. **Multimodal images**: Use `sendMessage({ text, files: FileUIPart[] })` on the client — `convertToModelMessages()` on the server handles `FileUIPart` (data URL → inline base64) automatically. No server route changes needed. Image attachments are persisted in `message_attachments` table and reloaded as `file` parts in the UIMessage `parts` array.
 
 ## Testing
 
