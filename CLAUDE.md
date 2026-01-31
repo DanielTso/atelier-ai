@@ -29,6 +29,8 @@ DASHSCOPE_API_KEY=your_key_here
 
 API keys and Ollama URL can also be configured at runtime via the **Settings dialog** (stored in the `settings` SQLite table). DB values take priority over `.env.local`.
 
+**Note:** `.env*.local` files and `sqlite.db` are gitignored. Never commit secrets or the local database.
+
 Three providers are supported — all optional, the app works with any combination:
 - **Google Gemini** (cloud): Requires a Gemini API key
 - **Alibaba Cloud Qwen** (cloud): Requires a DashScope API key from [Alibaba Cloud Model Studio](https://modelstudio.console.alibabacloud.com). Uses the US Virginia region endpoint (`dashscope-us.aliyuncs.com`)
