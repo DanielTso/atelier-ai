@@ -1,44 +1,70 @@
 # Atelier AI
 
-A beautiful, local-first AI chat interface built with Next.js, Tailwind CSS, and Ollama, now featuring hybrid support for Google Gemini models.
+Your all-in-one AI platform for work, school, and life. Atelier AI brings together chat, document intelligence, project management, and content generation into a single customizable dashboard — so you can focus on what matters instead of juggling tools.
+
+## Vision
+
+Atelier AI is designed for individuals, small teams, and companies who want a unified AI workspace they can make their own. Bring your own models (local, cloud, or fine-tuned), connect automation agents, upload documents for RAG-powered knowledge bases, and manage projects — all from one place. Pre-templated themes and sensible defaults eliminate decision fatigue so you can get started immediately.
 
 ## Features
-- **Hybrid AI:** Seamlessly switch between local models (Ollama) and cloud models (Google Gemini).
-- **Privacy:** Chats are stored locally in a SQLite database (`sqlite.db`).
-- **Organization:** Group chats into Projects with rename and alphabetical sorting.
-- **Chat Management:** Context menus for move, rename, archive, and delete operations.
-- **Auto-Titles:** Chat titles are automatically generated after the first AI response using the same LLM.
-- **Persona System:** Quick persona switching with 6 built-in presets and custom system prompts.
-- **Context Management:** Hybrid summarization for long conversations (auto-triggers at 30+ messages).
-- **Archive System:** Soft-delete chats with restore capability.
-- **UI:** Modern Glassmorphism design with Dark/Light mode.
-- **Streaming Cursor:** Animated cursor effect while AI generates responses.
-- **Markdown:** Renders code blocks and formatted text with copy button.
+
+### AI Chat
+- **Multi-Provider:** Switch between local models (Ollama), Google Gemini, Alibaba Qwen, or bring your own fine-tuned models
+- **Persona System:** 6 built-in presets and custom system prompts for different workflows
+- **Google Search Grounding:** Gemini models can search the web and cite sources inline
+- **Streaming:** Real-time response streaming with animated cursor
+
+### Document Intelligence (RAG)
+- **Project Knowledge Bases:** Upload PDF, DOCX, text, and code files to any project
+- **Automatic Chunking & Embedding:** Documents are processed and indexed for semantic retrieval
+- **Context-Aware Chat:** The AI references your uploaded documents when answering questions
+
+### Project Management
+- **Organize:** Group chats and documents into projects
+- **Project Defaults:** Set per-project personas, models, and system prompts
+- **Chat Management:** Rename, move, archive, and restore conversations
+
+### Semantic Memory
+- **Long-Term Recall:** Messages are embedded and searchable across conversations
+- **Smart Summarization:** Auto-compresses long conversations while preserving context (triggers at 30+ messages)
+- **Five-Layer Context:** System prompt, document RAG, semantic retrieval, summary, and recent messages
+
+### Customization
+- **Theming:** Dark, light, and system modes with glassmorphism design
+- **Appearance:** Configurable font size and message density
+- **Settings:** Runtime-configurable API keys, model defaults, and provider URLs — no restarts needed
+
+### Automation (Planned)
+- **n8n Integration:** Connect external automation agents to the Atelier AI platform
+- **Extensible:** Plugin architecture for custom workflows and integrations
 
 ## Prerequisites
-1.  **Ollama** (Optional): For local models, install and run `ollama serve`.
-2.  **Google Gemini API Key** (Optional): For cloud models.
-3.  **Node.js**: v18 or higher.
+
+1. **Node.js**: v18 or higher
+2. **Ollama** (Optional): For local models, install and run `ollama serve`
+3. **Google Gemini API Key** (Optional): For cloud models
+4. **DashScope API Key** (Optional): For Alibaba Qwen models
 
 ## Setup
-1.  Install dependencies:
+
+1. Install dependencies:
     ```bash
     npm install
     ```
-2.  Configure Environment:
-    Create a `.env.local` file in the root directory:
+2. Configure environment (create `.env.local`):
     ```bash
     GOOGLE_GENERATIVE_AI_API_KEY=your_gemini_api_key_here
+    DASHSCOPE_API_KEY=your_dashscope_api_key_here
     ```
-3.  Initialize the database:
+3. Initialize the database:
     ```bash
     npx drizzle-kit push
     ```
-4.  Run the development server:
+4. Run the development server:
     ```bash
     npm run dev
     ```
-5.  Open [http://localhost:3000](http://localhost:3000).
+5. Open [http://localhost:3000](http://localhost:3000).
 
 ## Testing
 
@@ -53,13 +79,17 @@ npm run test:all     # Run all tests
 - **Playwright:** 8 E2E tests covering chat flow, project management, and command palette.
 
 ## Tech Stack
+
 - **Framework:** Next.js 16 (App Router)
 - **Styling:** Tailwind CSS v4
-- **Database:** SQLite + Drizzle ORM
-- **AI:** Vercel AI SDK v6 (`ai@^6.0`, `@ai-sdk/react@^3.0`) + Ollama + Google Generative AI
+- **Database:** SQLite (local) / Turso (production) + Drizzle ORM
+- **AI:** Vercel AI SDK v6 + Ollama + Google Gemini + Alibaba Qwen
+- **Embeddings:** Ollama nomic-embed-text (local) / Gemini text-embedding-004 (cloud)
 - **Testing:** Vitest + Testing Library (unit/integration), Playwright (E2E)
+- **Deployment:** Vercel + Turso
 
 ## Documentation
+
 - [Version History (Changelog)](./CHANGELOG.md)
 - [Project Plan](./PLAN.md)
 - [Tech Stack Details](./TECH_STACKS.md)
