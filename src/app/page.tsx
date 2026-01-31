@@ -466,6 +466,38 @@ export default function Home() {
     }
   }
 
+  const handleCreateChatInProject = async (projectId: number) => {
+    try {
+      setActiveProjectId(projectId)
+      const [newC] = await createChat(projectId, "New Chat")
+      setChats([newC, ...chats])
+      setActiveChatId(newC.id)
+
+      // Auto-apply project defaults if configured
+      try {
+        const defaults = await getProjectDefaults(projectId)
+        if (defaults.defaultPersonaId) {
+          const persona = getPersonaById(defaults.defaultPersonaId)
+          if (persona?.prompt) {
+            await updateChatSystemPrompt(newC.id, persona.prompt)
+            setCurrentSystemPrompt(persona.prompt)
+            toast.success(`Applied project default: ${persona.name}`)
+          }
+        }
+        if (defaults.defaultModel) {
+          setSelectedModel(defaults.defaultModel)
+        }
+      } catch {
+        // Defaults are optional, don't block chat creation
+      }
+
+      toast.success("Chat created")
+    } catch (e) {
+      console.error(e)
+      setError("Failed to create chat.")
+    }
+  }
+
   const handleCreateStandaloneChat = async () => {
     try {
       const [newC] = await createStandaloneChat("New Chat")
@@ -480,7 +512,24 @@ export default function Home() {
   }
 
   const handleSendMessage = async () => {
-    if ((!input.trim() && attachedFiles.length === 0) || !activeChatId || isLoading) return
+    if ((!input.trim() && attachedFiles.length === 0) || isLoading) return
+
+    // Auto-create a quick chat if no chat is selected
+    if (!activeChatId) {
+      try {
+        const [newC] = await createStandaloneChat("New Chat")
+        setStandaloneChats(prev => [newC, ...prev])
+        setActiveChatId(newC.id)
+        setActiveProjectId(null)
+        // Wait for the chat to be set before sending
+        // sendMessage will fire after activeChatId updates via the ref
+        activeChatIdRef.current = newC.id
+      } catch (e) {
+        console.error(e)
+        setError("Failed to create chat.")
+        return
+      }
+    }
 
     const userMessage = attachedFiles.length > 0
       ? buildFileMessage(input.trim(), attachedFiles)
@@ -719,6 +768,7 @@ export default function Home() {
         onCreateProject={handleCreateProject}
         onCreateChat={handleCreateChat}
         onCreateStandaloneChat={handleCreateStandaloneChat}
+        onCreateChatInProject={handleCreateChatInProject}
         onSelectProject={handleSelectProject}
         onSelectChat={setActiveChatId}
         onSelectStandaloneChat={handleSelectStandaloneChat}

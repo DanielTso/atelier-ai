@@ -280,15 +280,15 @@ export const ChatInputArea = memo(function ChatInputArea({
             value={input}
             onChange={(e) => onInputChange(e.target.value)}
             onKeyDown={onKeyDown}
-            disabled={!activeChatId || isLoading}
+            disabled={isLoading}
             minRows={1}
             maxRows={6}
             className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 pr-12 focus:outline-none focus:ring-1 focus:ring-primary/50 transition-all placeholder:text-muted-foreground disabled:opacity-50 resize-none"
-            placeholder={activeChatId ? "Type a message... (Ctrl+Enter to send)" : "Select a chat to start typing..."}
+            placeholder="Type a message... (Ctrl+Enter to send)"
           />
           <button
             type="submit"
-            disabled={isLoading || (!input?.trim() && !hasFiles) || !activeChatId}
+            disabled={isLoading || (!input?.trim() && !hasFiles)}
             className="absolute right-2 top-2 p-1.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground transition-colors disabled:opacity-50"
           >
             {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
