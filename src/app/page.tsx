@@ -19,6 +19,7 @@ import { SystemPromptDialog } from "@/components/ui/SystemPromptDialog"
 import { SettingsDialog } from "@/components/ui/SettingsDialog"
 import { ProjectDefaultsDialog } from "@/components/ui/ProjectDefaultsDialog"
 import { ProjectDocumentsDialog } from "@/components/ui/ProjectDocumentsDialog"
+import { CreateProjectDialog } from "@/components/ui/CreateProjectDialog"
 import { useAppearanceSettings } from "@/hooks/useAppearanceSettings"
 import { useLocalStorage } from "@/hooks/useLocalStorage"
 import { useSmartDefaults } from "@/hooks/useSmartDefaults"
@@ -90,6 +91,7 @@ export default function Home() {
   const [projectDefaultsTarget, setProjectDefaultsTarget] = useState<{ id: number; name: string } | null>(null)
   const [projectDocumentsDialogOpen, setProjectDocumentsDialogOpen] = useState(false)
   const [projectDocumentsTarget, setProjectDocumentsTarget] = useState<{ id: number; name: string } | null>(null)
+  const [createProjectDialogOpen, setCreateProjectDialogOpen] = useState(false)
 
   // Sidebar collapse
   const [sidebarCollapsed, setSidebarCollapsed] = useLocalStorage('sidebar-collapsed', false)
@@ -414,8 +416,10 @@ export default function Home() {
   }, [])
 
   const handleCreateProject = async () => {
-    const name = prompt("Project Name:")
-    if (!name) return
+    setCreateProjectDialogOpen(true)
+  }
+
+  const handleConfirmCreateProject = async (name: string) => {
     try {
       const [newP] = await createProject(name)
       setProjects([...projects, newP])
@@ -856,6 +860,13 @@ export default function Home() {
         onSelectProject={handleSelectProject}
         onSelectChat={setActiveChatId}
         onSelectStandaloneChat={handleSelectStandaloneChat}
+      />
+
+      {/* Create Project Dialog */}
+      <CreateProjectDialog
+        open={createProjectDialogOpen}
+        onOpenChange={setCreateProjectDialogOpen}
+        onCreate={handleConfirmCreateProject}
       />
 
       {/* Delete Confirmation Dialog */}
