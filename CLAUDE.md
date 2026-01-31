@@ -58,7 +58,7 @@ Atelier AI is a Next.js 16 App Router chat application with hybrid AI backend (G
 
 ### Data Flow
 
-1. **Client** (`src/app/page.tsx`) — Single-page chat UI using `useChat` from `@ai-sdk/react`. All application state lives here (projects, chats, messages, model selection). Three main view states: **active chat** (full chat UI with header, messages, input), **project landing page** (project name, chat list with previews/dates, "Add files" button), **empty state** (centered Atelier AI logo/branding with always-visible input toolbar). Typing in the empty state auto-creates a standalone quick chat on send.
+1. **Client** (`src/app/page.tsx`) — Single-page chat UI using `useChat` from `@ai-sdk/react`. All application state lives here (projects, chats, messages, model selection). Three main view states: **active chat** (full chat UI with header, messages, input), **project landing page** (two-column layout: chats on left, files panel on right with document cards/progress), **empty state** (centered Atelier AI logo/branding with always-visible input toolbar). Typing in the empty state auto-creates a standalone quick chat on send.
 2. **Server Actions** (`src/app/actions.ts`) — "use server" functions for all DB reads/writes (CRUD for projects, chats, messages, settings, chat previews).
 3. **API Routes**:
    - `POST /api/chat` — Streams LLM responses. Routes to provider based on model name prefix (`gemini` → Google, `qwen` → DashScope, else → Ollama). Applies five-layer context: system prompt → document chunks → semantic retrieval → summary → recent 20 messages. Gemini models have Google Search grounding enabled automatically.
@@ -74,11 +74,11 @@ Atelier AI is a Next.js 16 App Router chat application with hybrid AI backend (G
 
 ### Component Structure
 
-- `src/components/chat/` — Chat-specific components: `Sidebar` (project/chat navigation, collapsible with icon-only mode, "Smart Chat" dropdown for quick/project chat creation, project defaults + documents icons), `MessagesList` (markdown rendering with Framer Motion animations, source URL rendering for grounded responses), `SmoothStreamingWrapper` (ResizeObserver-based smooth height transitions during streaming), `ChatHeader` (title-only, editable inline), `ChatInputArea` (always-visible input toolbar with ModelSelect, PersonaSelector, system prompt button, attach button, semantic memory indicator), `ProjectLandingPage` (project view with chat list, previews, and dates), `PersonaSuggestionBanner` (smart persona auto-suggestion), `ChatContextMenu`, `MessageActions`, `CodeBlock`
+- `src/components/chat/` — Chat-specific components: `Sidebar` (project/chat navigation, collapsible with icon-only mode, "Smart Chat" dropdown for quick/project chat creation, project defaults + documents icons), `MessagesList` (markdown rendering with Framer Motion animations, source URL rendering for grounded responses), `SmoothStreamingWrapper` (ResizeObserver-based smooth height transitions during streaming), `ChatHeader` (title-only, editable inline), `ChatInputArea` (always-visible input toolbar with ModelSelect, PersonaSelector, system prompt button, attach button, semantic memory indicator), `ProjectLandingPage` (two-column project view: chat list left, files panel right with document cards, progress bar, indexing status; fetches documents internally via `/api/documents`), `PersonaSuggestionBanner` (smart persona auto-suggestion), `ChatContextMenu`, `MessageActions`, `CodeBlock`
 - `src/components/ui/` — Reusable UI: `CommandPalette` (Cmd+K), `PersonaSelector` (6 built-in presets + 5 model+persona combos, grouped dropdown with Cloud/Local badges), `ModelSelect`, `SettingsDialog` (tabbed settings with API, Appearance, Model Defaults), `ProjectDefaultsDialog` (per-project persona/model defaults with usage stats), `ProjectDocumentsDialog` (upload, list, delete project documents for RAG), `SystemPromptDialog`, `RenameDialog`, `CreateProjectDialog` (styled Radix dialog replacing native `prompt()`), `DeleteConfirmDialog`, `Toaster` (sonner)
 - `src/components/settings/` — Settings tab components: `ApiSettingsTab` (Gemini key, DashScope key, Ollama URL + test), `AppearanceSettingsTab` (theme, font size, density), `ModelDefaultsSettingsTab` (default model, system prompt, persona management)
 - `src/hooks/` — `useLocalStorage<T>` (generic localStorage with SSR safety, deferred hydration to avoid mismatch), `usePersonas` (persona management with combo presets), `useCollapseState` (sidebar section state), `useAppearanceSettings` (font size + message density), `useSmartDefaults` (three-layer persona suggestion: project defaults → usage patterns → keyword heuristics)
-- `src/lib/` — `utils.ts` (`cn()` via clsx + tailwind-merge), `formatTime.ts` (relative timestamps), `settings.ts` (server-side DB-first/env-fallback settings helper), `embeddings.ts` (hybrid Ollama/Gemini embedding generation, cosine similarity, vector search for messages + document chunks), `chunking.ts` (overlapping sentence-aware text chunker for document RAG), `topicDetection.ts` (keyword-based conversation topic heuristics)
+- `src/lib/` — `utils.ts` (`cn()` via clsx + tailwind-merge), `formatTime.ts` (relative timestamps), `fileUtils.ts` (shared `formatFileSize()` + `getFileTypeBadge()` used by `ProjectDocumentsDialog` and `ProjectLandingPage`), `settings.ts` (server-side DB-first/env-fallback settings helper), `embeddings.ts` (hybrid Ollama/Gemini embedding generation, cosine similarity, vector search for messages + document chunks), `chunking.ts` (overlapping sentence-aware text chunker for document RAG), `topicDetection.ts` (keyword-based conversation topic heuristics)
 
 ### Database
 
@@ -183,12 +183,24 @@ Three tabs accessed via sidebar Settings button:
 The sidebar supports collapsed/expanded states via `useLocalStorage('sidebar-collapsed', false)`. When collapsed, it renders as a narrow icon-only strip with tooltips. Toggle via `PanelLeftClose`/`PanelLeftOpen` buttons. The "Smart Chat" button (Zap icon) opens a Radix `DropdownMenu` with "Quick Chat" (standalone) and each project as a destination — works in both expanded and collapsed modes.
 
 ### Project Landing Page
-When a user clicks a project in the sidebar (without selecting a chat), the main area displays a `ProjectLandingPage` component showing:
-- Project name header with folder icon and "Add files" button (opens `ProjectDocumentsDialog`)
+When a user clicks a project in the sidebar (without selecting a chat), the main area displays a `ProjectLandingPage` component with a **two-column layout** (`grid-cols-1 lg:grid-cols-[3fr_2fr]`, stacks on mobile):
+
+**Header**: Project name with folder icon (full width).
+
+**Left column** (chats):
 - Dashed "+ New chat in {projectName}" action row
 - Scrollable list of non-archived chats with title (bold), first user message preview (truncated to 120 chars, muted), and short date (e.g. "Jan 30")
 - Empty state ("No chats yet") when project has no chats
 - Loading skeleton while fetching previews
+- Separated from right column by `lg:border-r`
+
+**Right column** (files panel):
+- "Files" heading with `+` button (opens `ProjectDocumentsDialog`)
+- Progress bar: green when all documents ready, amber when indexing; status indicator with `CheckCircle2` or spinning `Loader2`
+- Total chunks indexed count
+- File card grid (`grid-cols-2 xl:grid-cols-3`): colored type badge pill, truncated filename, chunk count + file size; click opens `ProjectDocumentsDialog`
+- Empty state: upload icon + "No files yet" + "Upload documents for RAG" link
+- Documents fetched internally via `GET /api/documents?projectId=N` (no new props needed)
 
 Chat previews are fetched via `getProjectChatPreviews(projectId)` server action and refresh after create/delete/rename/move operations.
 

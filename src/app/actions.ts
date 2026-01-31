@@ -423,6 +423,17 @@ export async function updateChunkEmbedding(chunkId: number, embedding: number[])
     .returning()
 }
 
+export async function getDocumentChunks(documentId: number) {
+  return await db.select({
+    id: documentChunks.id,
+    chunkIndex: documentChunks.chunkIndex,
+    content: documentChunks.content,
+  }).from(documentChunks)
+    .where(eq(documentChunks.documentId, documentId))
+    .orderBy(documentChunks.chunkIndex)
+    .all()
+}
+
 export async function getDocumentChunksForProject(projectId: number) {
   return await db.select({
     id: documentChunks.id,

@@ -1,0 +1,117 @@
+'use client'
+
+import { memo, useState, useEffect } from 'react'
+import * as Dialog from '@radix-ui/react-dialog'
+import { X, FileText, Loader2 } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { formatFileSize, getFileTypeBadge } from '@/lib/fileUtils'
+import { getDocumentChunks } from '@/app/actions'
+
+interface DocumentPreviewDialogProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  document: {
+    id: number
+    filename: string
+    mimeType: string
+    fileSize: number
+    chunkCount: number | null
+    status: string
+  } | null
+}
+
+export const DocumentPreviewDialog = memo(function DocumentPreviewDialog({
+  open,
+  onOpenChange,
+  document: doc,
+}: DocumentPreviewDialogProps) {
+  const [content, setContent] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!open || !doc) return
+    setLoading(true)
+    setContent('')
+    getDocumentChunks(doc.id).then(chunks => {
+      // Chunks have overlap — deduplicate by using only the non-overlapping portion
+      // except for the last chunk which we take in full
+      const texts = chunks.map(c => c.content)
+      setContent(deduplicateChunks(texts))
+    }).catch(() => {
+      setContent('Failed to load document content.')
+    }).finally(() => {
+      setLoading(false)
+    })
+  }, [open, doc])
+
+  if (!doc) return null
+
+  const badge = getFileTypeBadge(doc.mimeType, doc.filename)
+
+  return (
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50" />
+        <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl glass-panel rounded-2xl p-6 z-50 shadow-xl max-h-[80vh] flex flex-col">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-4">
+            <Dialog.Title className="text-lg font-semibold flex items-center gap-2 min-w-0">
+              <FileText className="h-5 w-5 text-blue-400 shrink-0" />
+              <span className="truncate">{doc.filename}</span>
+              <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full shrink-0", badge.className)}>
+                {badge.label}
+              </span>
+            </Dialog.Title>
+            <Dialog.Close className="p-1 rounded hover:bg-white/10 transition-colors shrink-0 ml-2">
+              <X className="h-4 w-4" />
+            </Dialog.Close>
+          </div>
+
+          {/* Meta */}
+          <div className="flex items-center gap-4 text-xs text-muted-foreground mb-4">
+            <span>{formatFileSize(doc.fileSize)}</span>
+            {doc.chunkCount != null && (
+              <span>{doc.chunkCount} chunk{doc.chunkCount !== 1 ? 's' : ''}</span>
+            )}
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto min-h-0 rounded-lg bg-white/[0.03] border border-white/5 p-4">
+            {loading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <pre className="text-sm text-foreground/90 whitespace-pre-wrap break-words font-mono leading-relaxed">
+                {content}
+              </pre>
+            )}
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  )
+})
+
+/**
+ * Chunks are created with 400-char overlap. Reconstruct the original text by
+ * finding and removing the overlapping prefix of each subsequent chunk.
+ */
+function deduplicateChunks(texts: string[]): string {
+  if (texts.length === 0) return ''
+  let result = texts[0]
+  for (let i = 1; i < texts.length; i++) {
+    const prev = texts[i - 1]
+    const curr = texts[i]
+    // Find the longest suffix of prev that is a prefix of curr
+    let overlap = 0
+    const maxCheck = Math.min(prev.length, curr.length, 500)
+    for (let len = 1; len <= maxCheck; len++) {
+      if (prev.endsWith(curr.substring(0, len))) {
+        overlap = len
+      }
+    }
+    result += curr.substring(overlap)
+  }
+  return result
+}
