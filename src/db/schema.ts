@@ -98,6 +98,21 @@ export const personaUsage = sqliteTable('persona_usage', {
   chatIdIdx: index('idx_persona_usage_chat_id').on(table.chatId),
 }));
 
+// Message image/file attachments (multimodal)
+export const messageAttachments = sqliteTable('message_attachments', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  messageId: integer('message_id').references(() => messages.id, { onDelete: 'cascade' }).notNull(),
+  chatId: integer('chat_id').references(() => chats.id, { onDelete: 'cascade' }).notNull(),
+  filename: text('filename').notNull(),
+  mediaType: text('media_type').notNull(),
+  dataUrl: text('data_url').notNull(),
+  fileSize: integer('file_size').notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date()),
+}, (table) => ({
+  messageIdIdx: index('idx_attachments_message_id').on(table.messageId),
+  chatIdIdx: index('idx_attachments_chat_id').on(table.chatId),
+}));
+
 // Chat topic detection results
 export const chatTopics = sqliteTable('chat_topics', {
   id: integer('id').primaryKey({ autoIncrement: true }),

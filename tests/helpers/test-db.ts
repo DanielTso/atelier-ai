@@ -69,6 +69,20 @@ CREATE TABLE IF NOT EXISTS persona_usage (
 CREATE INDEX IF NOT EXISTS idx_persona_usage_project_id ON persona_usage(project_id);
 CREATE INDEX IF NOT EXISTS idx_persona_usage_chat_id ON persona_usage(chat_id);
 
+CREATE TABLE IF NOT EXISTS message_attachments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+  chat_id INTEGER NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+  filename TEXT NOT NULL,
+  media_type TEXT NOT NULL,
+  data_url TEXT NOT NULL,
+  file_size INTEGER NOT NULL,
+  created_at INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_attachments_message_id ON message_attachments(message_id);
+CREATE INDEX IF NOT EXISTS idx_attachments_chat_id ON message_attachments(chat_id);
+
 CREATE TABLE IF NOT EXISTS chat_topics (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   chat_id INTEGER NOT NULL REFERENCES chats(id) ON DELETE CASCADE,

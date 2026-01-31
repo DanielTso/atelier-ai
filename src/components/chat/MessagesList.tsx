@@ -68,6 +68,19 @@ function MessageFileChips({ files }: { files: FileMetadata[] }) {
   )
 }
 
+// Helper to extract image file parts from a message
+interface ImagePart {
+  mediaType: string
+  url: string
+}
+
+function getMessageImages(message: UIMessage): ImagePart[] {
+  return message.parts.filter((part): part is ImagePart & { type: 'file' } =>
+    part.type === 'file' && typeof (part as Record<string, unknown>).mediaType === 'string' &&
+    ((part as Record<string, unknown>).mediaType as string).startsWith('image/')
+  ).map(p => ({ mediaType: p.mediaType, url: p.url }))
+}
+
 // Helper to extract source-url parts from a message
 interface SourceUrl {
   sourceId: string
@@ -215,6 +228,28 @@ export const MessagesList = memo(function MessagesList({
                     ? "bg-primary/20 border-primary/10 rounded-tr-none"
                     : "bg-white/5 border-white/10 rounded-tl-none"
                 )}>
+                  {m.role === 'user' && (() => {
+                    const images = getMessageImages(m)
+                    return images.length > 0 ? (
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {images.map((img, idx) => (
+                          <a
+                            key={idx}
+                            href={img.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block rounded-lg overflow-hidden border border-white/10 hover:border-white/20 transition-colors"
+                          >
+                            <img
+                              src={img.url}
+                              alt="Attached image"
+                              className="max-w-[300px] max-h-[300px] object-contain"
+                            />
+                          </a>
+                        ))}
+                      </div>
+                    ) : null
+                  })()}
                   {m.role === 'user' && (() => {
                     const files = getMessageFiles(m)
                     return files ? <MessageFileChips files={files} /> : null

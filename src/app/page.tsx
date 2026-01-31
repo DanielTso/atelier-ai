@@ -7,7 +7,7 @@ import { DefaultChatTransport } from "ai"
 import { useEffect, useState, useRef, useCallback, useMemo } from "react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
-import { getProjects, createProject, getChats, getAllProjectChats, createChat, getChatMessages, saveMessage, deleteProject, updateProjectName, updateChatTitle, getStandaloneChats, createStandaloneChat, deleteChat, moveChatToProject, archiveChat, restoreChat, getArchivedChats, getMessageCount, getChatWithContext, updateChatSystemPrompt, getProjectDefaults, recordPersonaUsage, incrementUsageMessageCount, getProjectChatPreviews } from "./actions"
+import { getProjects, createProject, getChats, getAllProjectChats, createChat, getChatMessages, saveMessage, deleteProject, updateProjectName, updateChatTitle, getStandaloneChats, createStandaloneChat, deleteChat, moveChatToProject, archiveChat, restoreChat, getArchivedChats, getMessageCount, getChatWithContext, updateChatSystemPrompt, getProjectDefaults, recordPersonaUsage, incrementUsageMessageCount, getProjectChatPreviews, saveMessageAttachments, getChatAttachments } from "./actions"
 import { Sidebar } from "@/components/chat/Sidebar"
 import { ChatHeader } from "@/components/chat/ChatHeader"
 import { ChatInputArea } from "@/components/chat/ChatInputArea"
@@ -26,8 +26,9 @@ import { useSmartDefaults } from "@/hooks/useSmartDefaults"
 import { usePersonas } from "@/hooks/usePersonas"
 import { PersonaSuggestionBanner } from "@/components/chat/PersonaSuggestionBanner"
 import { ProjectLandingPage } from "@/components/chat/ProjectLandingPage"
-import type { AttachedFile } from "@/lib/fileAttachments"
+import type { AttachedFile, AttachedImage } from "@/lib/fileAttachments"
 import { buildFileMessage } from "@/lib/fileAttachments"
+import type { FileUIPart } from "ai"
 
 interface Model {
   name: string
@@ -46,6 +47,8 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null)
   const [input, setInput] = useState("")
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([])
+  const [attachedImages, setAttachedImages] = useState<AttachedImage[]>([])
+  const pendingImagesRef = useRef<AttachedImage[]>([])
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // Use ref to always get current model in transport body function
@@ -191,22 +194,25 @@ export default function Home() {
           triggerSummarization(currentChatId, messageCount)
         }
 
-        // Auto-generate title after first AI response (best-effort)
-        if (messageCount === 2) {
+        // Auto-generate title when still "New Chat" (retries up to 10 messages)
+        if (messageCount >= 2 && messageCount <= 10) {
           const chat = [...chatsRef.current, ...standaloneChatsRef.current]
             .find(c => c.id === currentChatId)
           if (chat && chat.title === 'New Chat') {
             const dbMessages = await getChatMessages(currentChatId, 2)
             const userMsg = dbMessages.find(m => m.role === 'user')
             try {
+              // Truncate content for title generation to keep requests small
+              const userSnippet = (userMsg?.content || '').slice(0, 500)
+              const assistantSnippet = textContent.slice(0, 500)
               const res = await fetch('/api/generate-title', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                   chatId: currentChatId,
                   messages: [
-                    { role: 'user', content: userMsg?.content || '' },
-                    { role: 'assistant', content: textContent },
+                    { role: 'user', content: userSnippet },
+                    { role: 'assistant', content: assistantSnippet },
                   ],
                   model: selectedModelRef.current,
                 }),
@@ -335,14 +341,42 @@ export default function Home() {
 
   const loadMessages = useCallback(async (cid: number) => {
     try {
-      const msgs = await getChatMessages(cid)
+      const [msgs, attachments] = await Promise.all([
+        getChatMessages(cid),
+        getChatAttachments(cid),
+      ])
+
+      // Group attachments by messageId
+      const attachmentsByMessageId = new Map<number, typeof attachments>()
+      for (const att of attachments) {
+        const existing = attachmentsByMessageId.get(att.messageId) ?? []
+        existing.push(att)
+        attachmentsByMessageId.set(att.messageId, existing)
+      }
+
       // Convert DB messages to AI SDK UIMessage format with parts
-      setMessages(msgs.map(m => ({
-        id: m.id.toString(),
-        role: m.role as 'user' | 'assistant',
-        parts: [{ type: 'text' as const, text: m.content }],
-        createdAt: m.createdAt ?? new Date(),
-      })))
+      setMessages(msgs.map(m => {
+        const msgAttachments = attachmentsByMessageId.get(m.id)
+        const parts: Array<{ type: 'text'; text: string } | { type: 'file'; mediaType: string; url: string }> = [
+          { type: 'text' as const, text: m.content },
+        ]
+        // Append image file parts from saved attachments
+        if (msgAttachments) {
+          for (const att of msgAttachments) {
+            parts.push({
+              type: 'file' as const,
+              mediaType: att.mediaType,
+              url: att.dataUrl,
+            })
+          }
+        }
+        return {
+          id: m.id.toString(),
+          role: m.role as 'user' | 'assistant',
+          parts,
+          createdAt: m.createdAt ?? new Date(),
+        }
+      }))
     } catch (e) {
       console.error(e)
       setError("Failed to load messages.")
@@ -512,7 +546,7 @@ export default function Home() {
   }
 
   const handleSendMessage = async () => {
-    if ((!input.trim() && attachedFiles.length === 0) || isLoading) return
+    if ((!input.trim() && attachedFiles.length === 0 && attachedImages.length === 0) || isLoading) return
 
     // Auto-create a quick chat if no chat is selected
     if (!activeChatId) {
@@ -531,13 +565,29 @@ export default function Home() {
       }
     }
 
+    // Capture images in ref before clearing state
+    pendingImagesRef.current = [...attachedImages]
+
     const userMessage = attachedFiles.length > 0
       ? buildFileMessage(input.trim(), attachedFiles)
       : input.trim()
+
+    // Build FileUIPart[] from attached images
+    const fileParts: FileUIPart[] = attachedImages.map(img => ({
+      type: 'file' as const,
+      mediaType: img.mediaType,
+      url: img.dataUrl,
+    }))
+
     setInput("")
     setAttachedFiles([])
+    setAttachedImages([])
 
-    await sendMessage({ text: userMessage })
+    if (fileParts.length > 0) {
+      await sendMessage({ text: userMessage, files: fileParts })
+    } else {
+      await sendMessage({ text: userMessage })
+    }
   }
 
   const handleFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -574,16 +624,33 @@ export default function Home() {
         .then((result) => {
           // Async embed the user message (best-effort)
           if (result?.[0]?.id) {
+            const messageId = result[0].id
             fetch('/api/embed', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                messageId: result[0].id,
+                messageId,
                 chatId: activeChatId,
                 projectId: activeProjectIdRef.current,
                 content: textContent,
               }),
             }).catch(() => {}) // Embedding is best-effort
+
+            // Save image attachments if any were pending
+            const pending = pendingImagesRef.current
+            if (pending.length > 0) {
+              pendingImagesRef.current = []
+              saveMessageAttachments(
+                messageId,
+                activeChatId,
+                pending.map(img => ({
+                  filename: img.name,
+                  mediaType: img.mediaType,
+                  dataUrl: img.dataUrl,
+                  fileSize: img.size,
+                }))
+              ).catch(err => console.error('[useEffect] Error saving attachments:', err))
+            }
           }
         })
         .catch(err => console.error('[useEffect] Error saving user message:', err))
@@ -852,6 +919,8 @@ export default function Home() {
               onModelChange={setSelectedModel}
               attachedFiles={attachedFiles}
               onFilesChange={setAttachedFiles}
+              attachedImages={attachedImages}
+              onImagesChange={setAttachedImages}
             />
           </>
         ) : activeProjectId ? (
@@ -889,6 +958,8 @@ export default function Home() {
               onModelChange={setSelectedModel}
               attachedFiles={attachedFiles}
               onFilesChange={setAttachedFiles}
+              attachedImages={attachedImages}
+              onImagesChange={setAttachedImages}
             />
           </>
         )}

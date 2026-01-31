@@ -6,8 +6,8 @@ import TextareaAutosize from 'react-textarea-autosize'
 import { toast } from 'sonner'
 import { PersonaSelector } from '@/components/ui/PersonaSelector'
 import { ModelSelect } from '@/components/ui/ModelSelect'
-import type { AttachedFile } from '@/lib/fileAttachments'
-import { formatFileSize, getFileTypeLabel } from '@/lib/fileAttachments'
+import type { AttachedFile, AttachedImage } from '@/lib/fileAttachments'
+import { formatFileSize, getFileTypeLabel, isImageFile, fileToAttachedImage } from '@/lib/fileAttachments'
 
 interface EmbedStatus {
   available: boolean
@@ -38,6 +38,8 @@ interface ChatInputAreaProps {
   onModelChange?: (model: string) => void
   attachedFiles: AttachedFile[]
   onFilesChange: (files: AttachedFile[]) => void
+  attachedImages: AttachedImage[]
+  onImagesChange: (images: AttachedImage[]) => void
 }
 
 export const ChatInputArea = memo(function ChatInputArea({
@@ -57,6 +59,8 @@ export const ChatInputArea = memo(function ChatInputArea({
   onModelChange,
   attachedFiles,
   onFilesChange,
+  attachedImages,
+  onImagesChange,
 }: ChatInputAreaProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -97,41 +101,77 @@ export const ChatInputArea = memo(function ChatInputArea({
     return () => clearTimeout(timer)
   }, [activeChatId, activeProjectId, isLoading])
 
+  const MAX_IMAGE_SIZE = 10 * 1024 * 1024 // 10MB
+
   const processFiles = useCallback(async (files: File[]) => {
-    setIsExtracting(true)
-    const results: AttachedFile[] = []
+    const imageFiles: File[] = []
+    const textFiles: File[] = []
 
     for (const file of files) {
-      try {
-        const formData = new FormData()
-        formData.append('file', file)
-
-        const res = await fetch('/api/extract', { method: 'POST', body: formData })
-        if (!res.ok) {
-          const data = await res.json()
-          toast.error(data.error || `Failed to process ${file.name}`)
+      if (isImageFile(file)) {
+        if (file.size > MAX_IMAGE_SIZE) {
+          toast.error(`${file.name} exceeds 10MB limit`)
           continue
         }
-
-        const data = await res.json()
-        results.push({
-          name: data.filename,
-          type: data.mimeType,
-          size: file.size,
-          charCount: data.charCount,
-          textContent: data.textContent,
-          truncated: data.truncated,
-        })
-      } catch {
-        toast.error(`Failed to process ${file.name}`)
+        imageFiles.push(file)
+      } else {
+        textFiles.push(file)
       }
     }
 
-    if (results.length > 0) {
-      onFilesChange([...attachedFiles, ...results])
+    // Process images client-side (no server call needed)
+    if (imageFiles.length > 0) {
+      const newImages: AttachedImage[] = []
+      for (const file of imageFiles) {
+        try {
+          const img = await fileToAttachedImage(file)
+          newImages.push(img)
+        } catch {
+          toast.error(`Failed to read ${file.name}`)
+        }
+      }
+      if (newImages.length > 0) {
+        onImagesChange([...attachedImages, ...newImages])
+      }
     }
-    setIsExtracting(false)
-  }, [attachedFiles, onFilesChange])
+
+    // Process text files via server extraction
+    if (textFiles.length > 0) {
+      setIsExtracting(true)
+      const results: AttachedFile[] = []
+
+      for (const file of textFiles) {
+        try {
+          const formData = new FormData()
+          formData.append('file', file)
+
+          const res = await fetch('/api/extract', { method: 'POST', body: formData })
+          if (!res.ok) {
+            const data = await res.json()
+            toast.error(data.error || `Failed to process ${file.name}`)
+            continue
+          }
+
+          const data = await res.json()
+          results.push({
+            name: data.filename,
+            type: data.mimeType,
+            size: file.size,
+            charCount: data.charCount,
+            textContent: data.textContent,
+            truncated: data.truncated,
+          })
+        } catch {
+          toast.error(`Failed to process ${file.name}`)
+        }
+      }
+
+      if (results.length > 0) {
+        onFilesChange([...attachedFiles, ...results])
+      }
+      setIsExtracting(false)
+    }
+  }, [attachedFiles, onFilesChange, attachedImages, onImagesChange])
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -150,13 +190,11 @@ export const ChatInputArea = memo(function ChatInputArea({
     e.stopPropagation()
     setIsDragOver(false)
 
-    if (!activeChatId) return
-
     const files = Array.from(e.dataTransfer.files)
     if (files.length > 0) {
       processFiles(files)
     }
-  }, [activeChatId, processFiles])
+  }, [processFiles])
 
   const handleFileInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? [])
@@ -171,7 +209,26 @@ export const ChatInputArea = memo(function ChatInputArea({
     onFilesChange(attachedFiles.filter((_, i) => i !== index))
   }, [attachedFiles, onFilesChange])
 
+  const removeImage = useCallback((index: number) => {
+    onImagesChange(attachedImages.filter((_, i) => i !== index))
+  }, [attachedImages, onImagesChange])
+
+  const handlePaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = Array.from(e.clipboardData.items)
+    const imageItems = items.filter(item => item.type.startsWith('image/'))
+    if (imageItems.length === 0) return
+
+    e.preventDefault()
+    const files = imageItems
+      .map(item => item.getAsFile())
+      .filter((f): f is File => f !== null)
+    if (files.length > 0) {
+      processFiles(files)
+    }
+  }, [processFiles])
+
   const hasFiles = attachedFiles.length > 0
+  const hasImages = attachedImages.length > 0
 
   return (
     <div
@@ -221,7 +278,7 @@ export const ChatInputArea = memo(function ChatInputArea({
             onClick={() => fileInputRef.current?.click()}
             disabled={isLoading}
             className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs text-muted-foreground hover:text-foreground hover:bg-white/10 transition-colors disabled:opacity-50"
-            title="Attach file (PDF, DOCX, text, code)"
+            title="Attach file or image"
           >
             <Paperclip className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Attach</span>
@@ -231,7 +288,7 @@ export const ChatInputArea = memo(function ChatInputArea({
             type="file"
             multiple
             className="hidden"
-            accept=".pdf,.docx,.txt,.md,.csv,.py,.js,.ts,.tsx,.jsx,.json,.html,.css,.java,.c,.cpp,.go,.rs,.rb,.php,.sh,.yaml,.yml,.xml,.sql"
+            accept=".pdf,.docx,.txt,.md,.csv,.py,.js,.ts,.tsx,.jsx,.json,.html,.css,.java,.c,.cpp,.go,.rs,.rb,.php,.sh,.yaml,.yml,.xml,.sql,.png,.jpg,.jpeg,.gif,.webp,image/*"
             onChange={handleFileInputChange}
           />
 
@@ -252,6 +309,34 @@ export const ChatInputArea = memo(function ChatInputArea({
             </div>
           )}
         </div>
+
+        {/* Attached image thumbnails */}
+        {hasImages && (
+          <div className="flex flex-wrap gap-2 mb-2 px-1">
+            {attachedImages.map((img, index) => (
+              <div
+                key={`img-${img.name}-${index}`}
+                className="relative group/thumb w-20 h-20 rounded-lg overflow-hidden border border-white/10 bg-black/20"
+              >
+                <img
+                  src={img.dataUrl}
+                  alt={img.name}
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute inset-x-0 bottom-0 bg-black/60 px-1 py-0.5">
+                  <span className="text-[10px] text-white/80 truncate block">{img.name}</span>
+                </div>
+                <button
+                  onClick={() => removeImage(index)}
+                  className="absolute top-0.5 right-0.5 p-0.5 rounded-full bg-black/60 text-white/80 hover:text-white hover:bg-black/80 opacity-0 group-hover/thumb:opacity-100 transition-opacity"
+                  title="Remove image"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Attached files chips */}
         {(hasFiles || isExtracting) && (
@@ -296,6 +381,7 @@ export const ChatInputArea = memo(function ChatInputArea({
             value={input}
             onChange={(e) => onInputChange(e.target.value)}
             onKeyDown={onKeyDown}
+            onPaste={handlePaste}
             disabled={isLoading}
             minRows={1}
             maxRows={6}
@@ -304,7 +390,7 @@ export const ChatInputArea = memo(function ChatInputArea({
           />
           <button
             type="submit"
-            disabled={isLoading || (!input?.trim() && !hasFiles)}
+            disabled={isLoading || (!input?.trim() && !hasFiles && !hasImages)}
             className="absolute right-2 top-2 p-1.5 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground transition-colors disabled:opacity-50"
           >
             {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}

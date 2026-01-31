@@ -1,7 +1,7 @@
 'use server'
 
 import { db } from '@/db'
-import { projects, chats, messages, settings, messageEmbeddings, personaUsage, chatTopics, documents, documentChunks } from '@/db/schema'
+import { projects, chats, messages, settings, messageEmbeddings, personaUsage, chatTopics, documents, documentChunks, messageAttachments } from '@/db/schema'
 import { eq, desc, isNull, isNotNull, and, gt, asc, count, inArray } from 'drizzle-orm'
 
 export async function getProjects() {
@@ -451,5 +451,33 @@ export async function getDocumentChunksForProject(projectId: number) {
         isNotNull(documentChunks.embedding)
       )
     )
+    .all()
+}
+
+// ── Message Attachment Actions ──
+
+export async function saveMessageAttachments(
+  messageId: number,
+  chatId: number,
+  attachments: { filename: string; mediaType: string; dataUrl: string; fileSize: number }[]
+) {
+  const results = []
+  for (const att of attachments) {
+    const result = await db.insert(messageAttachments).values({
+      messageId,
+      chatId,
+      filename: att.filename,
+      mediaType: att.mediaType,
+      dataUrl: att.dataUrl,
+      fileSize: att.fileSize,
+    }).returning()
+    results.push(result[0])
+  }
+  return results
+}
+
+export async function getChatAttachments(chatId: number) {
+  return await db.select().from(messageAttachments)
+    .where(eq(messageAttachments.chatId, chatId))
     .all()
 }

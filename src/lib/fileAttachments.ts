@@ -1,5 +1,40 @@
 // Types and utilities for file attachment message format
 
+// ── Image Attachments (multimodal) ──
+
+export interface AttachedImage {
+  name: string
+  mediaType: string      // 'image/png', 'image/jpeg', etc.
+  size: number
+  dataUrl: string        // "data:image/png;base64,..."
+}
+
+const IMAGE_MIME_TYPES = new Set([
+  'image/png', 'image/jpeg', 'image/gif', 'image/webp',
+])
+
+export function isImageFile(file: File): boolean {
+  return IMAGE_MIME_TYPES.has(file.type)
+}
+
+export function fileToAttachedImage(file: File): Promise<AttachedImage> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      resolve({
+        name: file.name,
+        mediaType: file.type,
+        size: file.size,
+        dataUrl: reader.result as string,
+      })
+    }
+    reader.onerror = () => reject(new Error(`Failed to read ${file.name}`))
+    reader.readAsDataURL(file)
+  })
+}
+
+// ── Text File Attachments ──
+
 export interface AttachedFile {
   name: string
   type: string
