@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <defs>
+    <linearGradient id="brand" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#60a5fa"/>
+      <stop offset="100%" stop-color="#c084fc"/>
+    </linearGradient>
+  </defs>
+  <!-- Stylized "A" letterform -->
+  <path d="M16 2L4 28h5.5l2.5-6h8l2.5 6H28L16 2zm0 9.5L19.5 20h-7L16 11.5z" fill="url(#brand)"/>
+  <!-- Pen nib accent at apex -->
+  <line x1="16" y1="2" x2="16" y2="0" stroke="url(#brand)" stroke-width="2" stroke-linecap="round"/>
+</svg>

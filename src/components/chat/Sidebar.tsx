@@ -155,6 +155,23 @@ export const Sidebar = memo(function Sidebar({
   if (collapsed) {
     return (
       <aside className="w-14 flex flex-col items-center glass-panel rounded-2xl py-4 px-1 transition-all duration-300 gap-2 shrink-0">
+        <Tooltip.Provider delayDuration={200}>
+          <Tooltip.Root>
+            <Tooltip.Trigger asChild>
+              <img src="/logo.svg" alt="Atelier AI" className="h-5 w-5" />
+            </Tooltip.Trigger>
+            <Tooltip.Portal>
+              <Tooltip.Content
+                side="right"
+                sideOffset={8}
+                className="px-2 py-1 text-xs rounded bg-popover border border-white/10 shadow-lg z-50"
+              >
+                Atelier AI
+                <Tooltip.Arrow className="fill-popover" />
+              </Tooltip.Content>
+            </Tooltip.Portal>
+          </Tooltip.Root>
+        </Tooltip.Provider>
         <CollapsedButton label="Expand sidebar" icon={PanelLeftOpen} onClick={onToggleCollapse} />
         <div className="h-px w-full bg-white/10 my-1" />
         <CollapsedButton label="New Chat" icon={Plus} onClick={onCreateStandaloneChat} className="text-primary" />
@@ -169,9 +186,12 @@ export const Sidebar = memo(function Sidebar({
     <aside className="w-72 flex flex-col glass-panel rounded-2xl transition-all duration-300 shrink-0 overflow-hidden">
       {/* Header with subtle gradient accent */}
       <div className="flex items-center justify-between px-4 pt-4 pb-3 mb-2 border-b border-white/5 bg-gradient-to-b from-white/[0.03] to-transparent">
-        <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-400">
-          Gemini Local
-        </h1>
+        <div className="flex items-center gap-2">
+          <img src="/logo.svg" alt="Atelier AI" className="h-6 w-6" />
+          <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-400">
+            Atelier AI
+          </h1>
+        </div>
         <div className="flex items-center gap-1">
           <button
             onClick={onThemeToggle}
