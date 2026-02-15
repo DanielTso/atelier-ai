@@ -15,6 +15,8 @@ npm test             # Run Vitest unit/integration tests
 npm run test:watch   # Run Vitest in watch mode
 npm run test:e2e     # Run Playwright E2E tests (starts dev server automatically)
 npm run test:all     # Run both Vitest and Playwright
+npm run test:coverage # Vitest with coverage
+npm run test:e2e:ui  # Playwright with interactive UI
 ```
 
 Path alias: `@/*` → `./src/*`.
@@ -62,15 +64,16 @@ Atelier AI is a Next.js 16 App Router chat application with hybrid AI backend (G
 2. **Server Actions** (`src/app/actions.ts`) — "use server" functions for all DB reads/writes (CRUD for projects, chats, messages, settings, chat previews).
 3. **API Routes**:
    - `POST /api/chat` — Streams LLM responses. Routes to provider based on model name prefix (`gemini` → Google, `qwen` → DashScope, else → Ollama). Applies five-layer context: system prompt → document chunks → semantic retrieval → summary → recent 20 messages. Gemini models have Google Search grounding enabled automatically.
-   - `GET /api/models` — Lists available models from all three providers. Caches for 5 minutes.
+   - `GET /api/models` — Lists available models from all three providers (only includes each provider's models when its API key is configured). Skips Ollama fetch entirely in cloud environments (`isCloudEnvironment()`). Ollama fetch uses 1s timeout. Caches for 5 minutes.
    - `POST /api/summarize` — Compresses older messages into an LLM-generated summary. Auto-triggers at 30+ messages, keeps last 10 in full detail.
    - `POST /api/embed` — Async embedding generation via Ollama `nomic-embed-text` or Gemini `text-embedding-004` (cloud fallback). Called after each message exchange (best-effort).
    - `GET /api/embed` — Returns embedding status (`available`, `provider`, `embeddingCount`) for a chat or project scope.
    - `POST /api/generate-title` — Auto-generates a concise chat title (3-6 words) after the first AI response. Uses the same provider routing as other routes. Best-effort, fires once when message count reaches 2 and title is still "New Chat".
-   - `POST /api/documents` — Synchronous document upload + processing. Accepts multipart form (`file` + `projectId`). Extracts text (PDF via `unpdf`, DOCX via `mammoth`, text/code via UTF-8), chunks with sentence-aware overlap (2000 chars/chunk, 400 overlap), embeds each chunk via the Ollama/Gemini pipeline, stores in `document_chunks` table. Returns document record with status.
+   - `POST /api/extract` — Extracts text from uploaded files (PDF via `unpdf`, DOCX via `mammoth`, text/code via UTF-8) without storing to DB. Used by `ChatInputArea` for text file attachments in chat. Max 10MB, 100K char output limit (truncates if exceeded).
+   - `POST /api/documents` — Synchronous document upload + processing. Accepts multipart form (`file` + `projectId`). Extracts text (reuses same logic as `/api/extract`), chunks with sentence-aware overlap (2000 chars/chunk, 400 overlap), embeds each chunk via the Ollama/Gemini pipeline, stores in `document_chunks` table. Returns document record with status.
    - `GET /api/documents` — Lists documents for a project (`?projectId=N`).
    - `DELETE /api/documents` — Deletes a document and its chunks (cascade) (`?id=N`).
-   - `POST /api/classify` — LLM-based conversation topic classification. Triggers after 3+ messages, cached per chat.
+   - `POST /api/classify` — LLM-based conversation topic classification. Uses first 10 messages for efficiency, only routes to Gemini or Ollama (not Qwen). Cached per chat in `chatTopics` table.
 
 ### Component Structure
 
@@ -84,12 +87,12 @@ Atelier AI is a Next.js 16 App Router chat application with hybrid AI backend (G
 
 SQLite via libSQL (`@libsql/client`) with Drizzle ORM (`drizzle-orm/libsql`). Schema at `src/db/schema.ts`, connection at `src/db/index.ts`. Uses `file:sqlite.db` locally, `TURSO_DATABASE_URL` on Vercel. Drizzle config (`drizzle.config.ts`) uses `dialect: "turso"`.
 
-Ten tables: `projects` → `chats` → `messages` (cascade deletes), `settings` (key-value store), `messageEmbeddings` (vector storage for semantic memory), `documents` (uploaded files per project), `documentChunks` (chunked text with 768-dim embeddings for document RAG), `messageAttachments` (multimodal image/file attachments per message), `personaUsage` (persona/model tracking), `chatTopics` (detected conversation topics). Key chat fields: `archived` (soft delete), `systemPrompt`, `summary`, `summaryUpToMessageId`. Key project fields: `defaultPersonaId`, `defaultModel`. Key document fields: `projectId`, `filename`, `mimeType`, `fileSize`, `charCount`, `chunkCount`, `status` ('processing'|'ready'|'error'). Key chunk fields: `documentId`, `projectId`, `chunkIndex`, `content`, `embedding` (nullable JSON 768-dim vector). Key attachment fields: `messageId`, `chatId`, `filename`, `mediaType`, `dataUrl` (base64 data URL), `fileSize`. Settings table: `key` (text PK), `value` (text), `updatedAt` (timestamp).
+Ten tables: `projects` → `chats` → `messages` (cascade deletes), `settings` (key-value store), `messageEmbeddings` (vector storage for semantic memory), `documents` (uploaded files per project), `documentChunks` (chunked text with 768-dim embeddings for document RAG), `messageAttachments` (multimodal image/file attachments per message), `personaUsage` (persona/model tracking), `chatTopics` (detected conversation topics). Key chat fields: `archived` (soft delete), `systemPrompt`, `summary`, `summaryUpToMessageId`. Key project fields: `defaultPersonaId`, `defaultModel`. Key document fields: `projectId`, `filename`, `mimeType`, `fileSize`, `charCount`, `chunkCount`, `status` ('processing'|'ready'|'error'), `errorMessage`. Key chunk fields: `documentId`, `projectId`, `chunkIndex`, `content`, `embedding` (nullable JSON 768-dim vector). Key attachment fields: `messageId`, `chatId`, `filename`, `mediaType`, `dataUrl` (base64 data URL), `fileSize`. Settings table: `key` (text PK), `value` (text), `updatedAt` (timestamp).
 
 ### State Management
 
 - **Server state**: SQLite via server actions (projects, chats, messages, settings)
-- **Server-accessible settings**: API keys, Ollama URL, default model/prompt stored in `settings` table via `src/lib/settings.ts` (DB-first, env-fallback)
+- **Server-accessible settings**: API keys, Ollama URL, default model/prompt stored in `settings` table via `src/lib/settings.ts` (DB-first, env-fallback). `isCloudEnvironment()` checks for `TURSO_DATABASE_URL` to skip local-only features (e.g., Ollama fetch in `/api/models`)
 - **UI persistence**: `useLocalStorage` hook (sidebar collapse, custom personas, font size, message density). Uses deferred hydration — initializes with default value, reads localStorage in `useEffect` to avoid SSR hydration mismatch
 - **Theme**: `next-themes` with class-based dark/light/system switching (configurable in Settings dialog)
 - **Refs for closures**: Dynamic values (selectedModel, activeChatId, chats, standaloneChats) use `useRef` to avoid stale closures in `useChat` transport and `onFinish` callback
