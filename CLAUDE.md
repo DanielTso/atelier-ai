@@ -359,7 +359,7 @@ Config: `playwright.config.ts`. Tests in `e2e/`. Chromium only. Auto-starts dev 
 
 ## Deployment (Vercel + Turso)
 
-Production is deployed on **Vercel** at [atelier-ai-app.vercel.app](https://atelier-ai-app.vercel.app). GitHub repo: [DanielTso/atelier-ai](https://github.com/DanielTso/atelier-ai). The Vercel project has these environment variables:
+Production is deployed on **Vercel** at [atelier-ai.vercel.app](https://atelier-ai.vercel.app). GitHub repo: [DanielTso/atelier-ai](https://github.com/DanielTso/atelier-ai). The Vercel project has these environment variables:
 - `TURSO_DATABASE_URL` — libSQL connection URL (e.g., `libsql://your-db.turso.io`)
 - `TURSO_AUTH_TOKEN` — Turso database auth token
 - `GOOGLE_GENERATIVE_AI_API_KEY` — Gemini API key
