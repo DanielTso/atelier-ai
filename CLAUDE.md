@@ -1,4 +1,4 @@
-# CLAUDE.md — Atelier AI
+# CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -17,6 +17,13 @@ npm run test:e2e     # Run Playwright E2E tests (starts dev server automatically
 npm run test:all     # Run both Vitest and Playwright
 npm run test:coverage # Vitest with coverage
 npm run test:e2e:ui  # Playwright with interactive UI
+```
+
+Run a single test file:
+```bash
+npx vitest run tests/unit/lib/utils.test.ts        # Single Vitest file
+npx playwright test e2e/chat.spec.ts                # Single Playwright file
+npx vitest run tests/unit/api/                      # All tests in a directory
 ```
 
 Path alias: `@/*` → `./src/*`.
@@ -75,13 +82,17 @@ Atelier AI is a Next.js 16 App Router chat application with hybrid AI backend (G
    - `DELETE /api/documents` — Deletes a document and its chunks (cascade) (`?id=N`).
    - `POST /api/classify` — LLM-based conversation topic classification. Uses first 10 messages for efficiency, only routes to Gemini or Ollama (not Qwen). Cached per chat in `chatTopics` table.
 
-### Component Structure
+### Source Layout
 
-- `src/components/chat/` — Chat-specific components: `Sidebar` (project/chat navigation, collapsible with icon-only mode, "Smart Chat" dropdown for quick/project chat creation, project defaults + documents icons), `MessagesList` (markdown rendering with Framer Motion animations, source URL rendering for grounded responses, inline image display from `FileUIPart` parts), `SmoothStreamingWrapper` (ResizeObserver-based smooth height transitions during streaming), `ChatHeader` (title-only, editable inline), `ChatInputArea` (always-visible input toolbar with ModelSelect, PersonaSelector, system prompt button, attach button, semantic memory indicator; supports image upload/paste/drag-drop with 80×80 thumbnail previews), `ProjectLandingPage` (two-column project view: chat list left, files panel right with document cards, progress bar, indexing status; fetches documents internally via `/api/documents`), `PersonaSuggestionBanner` (smart persona auto-suggestion), `ChatContextMenu`, `MessageActions`, `CodeBlock`
-- `src/components/ui/` — Reusable UI: `CommandPalette` (Cmd+K), `PersonaSelector` (6 built-in presets + 5 model+persona combos, grouped dropdown with Cloud/Local badges), `ModelSelect`, `SettingsDialog` (tabbed settings with API, Appearance, Model Defaults), `ProjectDefaultsDialog` (per-project persona/model defaults with usage stats), `ProjectDocumentsDialog` (upload, list, delete project documents for RAG), `DocumentPreviewDialog` (read-only document preview showing full extracted text from chunks, with overlap deduplication), `SystemPromptDialog`, `RenameDialog`, `CreateProjectDialog` (styled Radix dialog replacing native `prompt()`), `DeleteConfirmDialog`, `Toaster` (sonner)
-- `src/components/settings/` — Settings tab components: `ApiSettingsTab` (Gemini key, DashScope key, Ollama URL + test), `AppearanceSettingsTab` (theme, font size, density), `ModelDefaultsSettingsTab` (default model, system prompt, persona management)
-- `src/hooks/` — `useLocalStorage<T>` (generic localStorage with SSR safety, deferred hydration to avoid mismatch), `usePersonas` (persona management with combo presets), `useCollapseState` (sidebar section state), `useAppearanceSettings` (font size + message density), `useSmartDefaults` (three-layer persona suggestion: project defaults → usage patterns → keyword heuristics)
-- `src/lib/` — `utils.ts` (`cn()` via clsx + tailwind-merge), `formatTime.ts` (relative timestamps), `fileUtils.ts` (shared `formatFileSize()` + `getFileTypeBadge()` used by `ProjectDocumentsDialog` and `ProjectLandingPage`), `fileAttachments.ts` (text file attachment format + image utilities: `AttachedImage` interface, `isImageFile()`, `fileToAttachedImage()` for client-side FileReader conversion), `settings.ts` (server-side DB-first/env-fallback settings helper), `embeddings.ts` (hybrid Ollama/Gemini embedding generation, cosine similarity, vector search for messages + document chunks), `chunking.ts` (overlapping sentence-aware text chunker for document RAG), `topicDetection.ts` (keyword-based conversation topic heuristics)
+- `src/app/page.tsx` — Single-page client; all application state lives here
+- `src/app/actions.ts` — Server actions for all DB reads/writes
+- `src/app/api/` — API routes (chat, models, embed, summarize, documents, etc.)
+- `src/components/chat/` — Chat-specific components (Sidebar, MessagesList, ChatInputArea, ProjectLandingPage, etc.)
+- `src/components/ui/` — Reusable UI (dialogs, selectors, command palette)
+- `src/components/settings/` — Settings tab components
+- `src/hooks/` — Custom hooks (useLocalStorage, usePersonas, useAppearanceSettings, etc.)
+- `src/lib/` — Utilities: `settings.ts` (DB-first/env-fallback config), `embeddings.ts` (vector search), `chunking.ts` (document chunker), `fileAttachments.ts` (image/file handling)
+- `src/db/` — `schema.ts` (Drizzle schema), `index.ts` (connection)
 
 ### Database
 
@@ -153,41 +164,17 @@ Project-scoped document upload and retrieval-augmented generation. Users upload 
 - Top-3 chunks above 0.5 threshold injected as `[Relevant information from project documents]` context
 - Document context is injected BEFORE semantic message context (documents take priority)
 
-**Supported file types**: PDF, DOCX, TXT, MD, CSV, and code files (JS, TS, TSX, JSX, PY, JSON, HTML, CSS, Java, C, C++, Go, Rust, Ruby, PHP, Shell, YAML, XML, SQL).
+**Supported file types**: PDF, DOCX, TXT, MD, CSV, and common code files.
 
-**UI**: Two entry points for document management:
-- `ProjectDocumentsDialog`: Drag-drop upload zone, document list with file type badges, size, chunk count, status icons (spinner/check/error), delete buttons. Footer shows total chunks indexed. Opened from sidebar `FileText` icon or "Upload documents for RAG" link.
-- `DocumentPreviewDialog`: Read-only preview of a document's extracted text. Fetches chunks via `getDocumentChunks(documentId)` server action, deduplicates the 400-char overlap between consecutive chunks, and renders the reconstructed text in a scrollable monospace view. Opened by clicking a file card on the `ProjectLandingPage`.
+**UI**: `ProjectDocumentsDialog` (upload/list/delete, opened from sidebar) and `DocumentPreviewDialog` (read-only text preview with chunk overlap deduplication, opened from ProjectLandingPage file cards).
 
 ### Multimodal Image Input
 
-Users can attach images to chat messages via three methods: click the Attach button (accepts PNG, JPG, GIF, WebP alongside text files), paste from clipboard (Ctrl+V), or drag-and-drop onto the input area. Max 10MB per image; oversized files show a toast error.
+Images are sent as `FileUIPart` parts via `sendMessage({ text, files })` and persisted in the `message_attachments` DB table (base64 data URLs). On reload, `loadMessages()` fetches attachments and appends them as `file` parts to UIMessage.
 
-**Client-side flow**:
-1. `ChatInputArea` splits incoming files via `isImageFile()` — images are read client-side via `fileToAttachedImage()` (FileReader → data URL), text files go through server-side `/api/extract` as before
-2. Image thumbnails (80×80, object-cover) render above the textarea with filename overlay and remove button
-3. On send, `page.tsx` builds `FileUIPart[]` from `attachedImages` state and calls `sendMessage({ text, files: fileParts })`
-4. Images are captured in `pendingImagesRef` before state clears, then saved to `message_attachments` DB table after the user message is persisted (via the existing `saveMessage` → `useEffect` flow)
-
-**Persistence**:
-- `saveMessageAttachments(messageId, chatId, attachments[])` — server action, stores each image as a row with `filename`, `mediaType`, `dataUrl` (full base64), `fileSize`
-- `getChatAttachments(chatId)` — server action, loads all attachments for a chat
-- `loadMessages()` fetches attachments in parallel with messages, groups by `messageId`, and appends `{ type: 'file', mediaType, url }` parts to the UIMessage `parts` array
-
-**Display**: `MessagesList` extracts `file` parts with `image/*` media types via `getMessageImages()` and renders them as clickable inline images (max 300×300, `object-contain`) inside user message bubbles, before text content and file chips. Clicking opens the full image in a new tab.
-
-**Server-side**: The `/api/chat` route requires **no changes** — `convertToModelMessages()` from AI SDK v6 natively converts `FileUIPart` data URLs into the correct provider format (inline base64 for Gemini/Qwen).
-
-**Provider compatibility**:
-- **Gemini**: Full native vision support
-- **Qwen**: Full vision support via DashScope OpenAI-compatible API
-- **Ollama**: Model-dependent — multimodal models (llava, bakllava) work; text-only models will error
+The `/api/chat` route needs no special handling — `convertToModelMessages()` from AI SDK v6 converts `FileUIPart` data URLs into provider-specific formats automatically. Gemini and Qwen have full vision support; Ollama requires multimodal models (llava, bakllava).
 
 ## Settings System
-
-### Storage Strategy
-- **Server-accessible settings** (API keys, URLs, defaults) → SQLite `settings` key-value table
-- **Client-only preferences** (theme, font size, density, sidebar collapse) → `localStorage`
 
 ### Server Helper (`src/lib/settings.ts`)
 ```typescript
@@ -202,40 +189,12 @@ getDefaultSystemPrompt() // DB 'default-system-prompt'
 ### API Route Provider Creation
 All API routes (`chat`, `models`, `summarize`, `generate-title`) create providers **per-request** using the settings helper rather than module-level singletons. This allows runtime configuration changes without server restart. Provider routing uses model name prefixes: `gemini` → `@ai-sdk/google`, `qwen` → `@ai-sdk/openai` (DashScope), else → `ai-sdk-ollama`.
 
-### Settings Dialog
-Three tabs accessed via sidebar Settings button:
-- **API & Providers**: Gemini API key (password field), DashScope API key (password field), Ollama URL with "Test Connection" button
-- **Appearance**: Theme (Light/Dark/System cards), font size (Small/Medium/Large), message density (Compact/Comfortable/Spacious)
-- **Model Defaults**: Default model selector, default system prompt, persona management (view built-in, add/delete custom)
+### Key UI Behaviors
 
-### Collapsible Sidebar
-The sidebar supports collapsed/expanded states via `useLocalStorage('sidebar-collapsed', false)`. When collapsed, it renders as a narrow icon-only strip with tooltips. Toggle via `PanelLeftClose`/`PanelLeftOpen` buttons. The "Smart Chat" button (Zap icon) opens a Radix `DropdownMenu` with "Quick Chat" (standalone) and each project as a destination — works in both expanded and collapsed modes.
-
-### Project Landing Page
-When a user clicks a project in the sidebar (without selecting a chat), the main area displays a `ProjectLandingPage` component with a **two-column layout** (`grid-cols-1 lg:grid-cols-[3fr_2fr]`, stacks on mobile):
-
-**Header**: Project name with folder icon (full width).
-
-**Left column** (chats):
-- Dashed "+ New chat in {projectName}" action row
-- Scrollable list of non-archived chats with title (bold), first user message preview (truncated to 120 chars, muted), and short date (e.g. "Jan 30")
-- Empty state ("No chats yet") when project has no chats
-- Loading skeleton while fetching previews
-- Separated from right column by `lg:border-r`
-
-**Right column** (files panel):
-- "Files" heading with "+ File" button (opens native file picker for direct upload)
-- Drag-and-drop upload zone: entire panel is a drop target with visual highlight (`bg-primary/5`) and dashed "Drop file to upload" hint; uploads directly via `POST /api/documents`
-- Progress bar: green when all documents ready, amber when indexing; status indicator with `CheckCircle2` or spinning `Loader2`
-- Total chunks indexed count
-- File card grid (`grid-cols-2 xl:grid-cols-3`): colored type badge pill, truncated filename, chunk count + file size; click opens `DocumentPreviewDialog` (read-only preview of extracted text with chunk overlap deduplication via `getDocumentChunks()` server action)
-- Empty state: upload icon + "No files yet" + "Upload documents for RAG" link
-- Documents fetched internally via `GET /api/documents?projectId=N` (no new props needed)
-
-Chat previews are fetched via `getProjectChatPreviews(projectId)` server action and refresh after create/delete/rename/move operations.
-
-### Input Toolbar
-The `ChatInputArea` toolbar (ModelSelect, PersonaSelector, System Prompt, Attach, semantic memory indicator) is **always visible** — including the empty state with no active chat. The model selector was moved from `ChatHeader` to the input toolbar so it's accessible before starting a conversation. The textarea is always enabled; sending a message with no active chat auto-creates a standalone quick chat. The Attach button accepts both text documents and images (PNG, JPG, GIF, WebP). Pasting an image from clipboard (Ctrl+V) or dragging an image onto the input area also attaches it. Image thumbnails appear in a grid above the textarea; text file chips appear below.
+- **Input toolbar is always visible** — even with no active chat. Sending a message with no chat auto-creates a standalone quick chat.
+- **Sidebar collapses** to icon-only mode via `useLocalStorage('sidebar-collapsed', false)`.
+- **Project landing page** shows two-column layout (chats left, files/documents right). Documents fetched internally via `GET /api/documents?projectId=N`.
+- **Image attachments** via click, clipboard paste (Ctrl+V), or drag-and-drop. Max 10MB. Persisted in `message_attachments` table.
 
 ## AI SDK v6 Implementation Details
 
@@ -382,24 +341,6 @@ Workflow: `.github/workflows/ci.yml` — runs on push to `master` and on PRs.
 
 No secrets required — all tests mock AI providers and use in-memory DB. Playwright report uploaded as artifact (14-day retention).
 
-## MCP Servers
-
-Project-level MCP servers configured in `~/.claude.json` for this project:
-
-| Server | Transport | Purpose |
-|--------|-----------|---------|
-| Context7 | plugin | Up-to-date library documentation and code examples |
-| Playwright | plugin | Browser automation for live demos and visual testing |
-| SQLite | stdio | Direct database inspection and querying |
-| Next.js DevTools | stdio | Framework-aware debugging, server action inspection |
-| GitHub | http | PR/issue management, code search |
-| Sentry | http | Error tracking and stack trace analysis |
-| Vercel | http | Deployment management and build log analysis |
-
 ## Chat Logs
 
-Development session logs with Claude Code are stored in `docs/`. **Before compacting context or ending a long session, always update the relevant chat log with decisions made and work completed, then commit and push.**
-
-- [`docs/chatlog-2026-01-31-document-rag.md`](docs/chatlog-2026-01-31-document-rag.md) — Document RAG implementation (schema, chunking, embeddings, API, UI, testing, deployment)
-- [`docs/chatlog-2026-01-31-session-cleanup.md`](docs/chatlog-2026-01-31-session-cleanup.md) — Session cleanup: commit, deploy, Turso schema verification
-- [`docs/chatlog-2026-01-31-multimodal-images.md`](docs/chatlog-2026-01-31-multimodal-images.md) — UI refinements (Smart Chat, project landing page, input toolbar, document preview) and multimodal image input support
+Development session logs are stored in `docs/chatlog-*.md`. Before compacting context or ending a long session, update the relevant chat log with decisions made and work completed, then commit and push.
