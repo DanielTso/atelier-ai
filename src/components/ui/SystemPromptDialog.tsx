@@ -63,7 +63,7 @@ export const SystemPromptDialog = memo(function SystemPromptDialog({
                   System Instruction
                 </Dialog.Title>
                 <Dialog.Description className="text-xs text-muted-foreground">
-                  Define the AI's personality and behavior for this chat
+                  Define the AI&apos;s personality and behavior for this chat
                 </Dialog.Description>
               </div>
             </div>
@@ -128,7 +128,7 @@ export const SystemPromptDialog = memo(function SystemPromptDialog({
 
           <div className="mt-4 pt-4 border-t border-white/10">
             <p className="text-xs text-muted-foreground">
-              The system instruction defines the AI's role and behavior. It's always included in every message and never trimmed during context management.
+              The system instruction defines the AI&apos;s role and behavior. It&apos;s always included in every message and never trimmed during context management.
             </p>
           </div>
         </Dialog.Content>

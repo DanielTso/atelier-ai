@@ -24,7 +24,7 @@ interface Model {
 interface ChatInputAreaProps {
   input: string
   onInputChange: (value: string) => void
-  onSend: () => void
+  onSend?: () => void
   onFormSubmit: (e: React.FormEvent<HTMLFormElement>) => void
   onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void
   isLoading: boolean
@@ -45,7 +45,6 @@ interface ChatInputAreaProps {
 export const ChatInputArea = memo(function ChatInputArea({
   input,
   onInputChange,
-  onSend,
   onFormSubmit,
   onKeyDown,
   isLoading,

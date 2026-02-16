@@ -370,6 +370,18 @@ Deploy with `vercel --prod`. Schema changes must be pushed to Turso separately:
 TURSO_DATABASE_URL=libsql://... TURSO_AUTH_TOKEN=... npx drizzle-kit push
 ```
 
+## CI (GitHub Actions)
+
+Workflow: `.github/workflows/ci.yml` — runs on push to `master` and on PRs.
+
+**Pipeline** (single job, `ubuntu-latest`, Node 22):
+1. `npm run lint` — ESLint
+2. `npm run build` — Next.js production build (catches TypeScript errors)
+3. `npm test` — Vitest unit/integration tests (in-memory SQLite, no secrets needed)
+4. `npm run test:e2e` — Playwright E2E tests (auto-starts dev server, Chromium only)
+
+No secrets required — all tests mock AI providers and use in-memory DB. Playwright report uploaded as artifact (14-day retention).
+
 ## MCP Servers
 
 Project-level MCP servers configured in `~/.claude.json` for this project:
