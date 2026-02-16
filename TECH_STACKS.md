@@ -25,10 +25,11 @@ This document outlines the final technology choices used in the "Atelier AI" app
     *   Server uses `convertToModelMessages()` and `toUIMessageStreamResponse()`
 *   **Ollama AI Provider (`ai-sdk-ollama`):** For connecting to locally hosted models (Llama 3, Mistral, Qwen, etc.).
 *   **Google Generative AI SDK (`@ai-sdk/google`):** For integrating Gemini cloud models (Gemini 3, Gemini 2.5, etc.).
+*   **Alibaba Cloud DashScope (`@ai-sdk/openai`):** For Qwen cloud models via OpenAI-compatible endpoint (`dashscope-us.aliyuncs.com`).
 
 ## Data Persistence
-*   **SQLite (better-sqlite3):** A high-performance, serverless SQL database perfect for local, private data storage.
-*   **Drizzle ORM:** A lightweight, type-safe ORM for interacting with the SQLite database.
+*   **SQLite (`@libsql/client`):** Supports both local SQLite files (`file:sqlite.db`) and remote Turso databases. Bundles natively in serverless — no `serverExternalPackages` needed.
+*   **Drizzle ORM (`drizzle-orm/libsql`):** A lightweight, type-safe ORM. Drizzle config uses `dialect: "turso"`.
 
 ## Settings & Configuration
 *   **Hybrid storage strategy:**
@@ -39,4 +40,6 @@ This document outlines the final technology choices used in the "Atelier AI" app
 
 ## Deployment / Runtime
 *   **Node.js:** The runtime environment.
-*   **Localhost:** Primarily designed to run locally on the user's machine to ensure data privacy and access to local Ollama instances.
+*   **Vercel:** Production deployment at [atelier-ai.vercel.app](https://atelier-ai.vercel.app). CLI deployments via `npx vercel --prod`.
+*   **Turso:** Remote libSQL database for production. Local development uses `file:sqlite.db`.
+*   **GitHub Actions:** CI pipeline (lint → build → vitest → playwright) on push to `master` and PRs.

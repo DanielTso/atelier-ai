@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.0] - 2026-02-15
+
+### Documentation & Maintenance
+- **CLAUDE.md Condensation:** Reduced from 346 to 165 lines — removed redundant sections, cut code examples, merged overlapping retrieval docs (Context Management + Semantic Memory + Document RAG → Context Pipeline, Provider Routing, Multimodal).
+- **Dependency Updates:** AI SDK 6.0.58→6.0.86, React 19.2.3→19.2.4, Zod 3→4, Playwright 1.58.0→1.58.2, framer-motion, lucide-react, dotenv, tailwind-merge, ai-sdk-ollama.
+- **Bug Fix:** Restored drizzle-kit from accidental downgrade (0.18.1→0.31.8).
+- **Bug Fix:** Downgraded ESLint from ^10 to ^9 for eslint-config-next compatibility (CI fix).
+- **Vercel CLI:** Set up CLI deployment (`npx vercel --prod`).
+
 ## [1.2.1] - 2026-01-30
 
 ### Smooth Streaming Animation

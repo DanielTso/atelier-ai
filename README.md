@@ -75,7 +75,7 @@ npm run test:e2e     # Run E2E tests (Playwright + Chromium)
 npm run test:all     # Run all tests
 ```
 
-- **Vitest:** 104 unit/integration tests covering utilities, server actions, API routes, and React hooks. Uses in-memory SQLite for isolated DB tests.
+- **Vitest:** 105 unit/integration tests covering utilities, server actions, API routes, and React hooks. Uses in-memory SQLite for isolated DB tests.
 - **Playwright:** 8 E2E tests covering chat flow, project management, and command palette.
 
 ## Tech Stack

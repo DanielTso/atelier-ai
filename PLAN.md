@@ -1,13 +1,15 @@
 # Project Plan: Atelier AI
 
 ## Tech Stack
-- **Framework:** Next.js 14+ (App Router)
+- **Framework:** Next.js 16 (App Router)
 - **Language:** TypeScript
-- **Styling:** Tailwind CSS (with `backdrop-blur` for Glassmorphism)
+- **Styling:** Tailwind CSS v4 (with `backdrop-blur` for Glassmorphism)
 - **Icons:** Lucide React
-- **AI Integration:** Vercel AI SDK (Ollama Provider) or direct Fetch
-- **Database:** SQLite (via `better-sqlite3` and `drizzle-orm` for type safety and speed)
+- **AI Integration:** Vercel AI SDK v6 (Ollama + Google Gemini + Alibaba Qwen)
+- **Database:** SQLite via `@libsql/client` + `drizzle-orm/libsql` (local) / Turso (production)
 - **Theme:** `next-themes` for Dark/Light mode
+- **Deployment:** Vercel + Turso
+- **CI:** GitHub Actions (lint → build → vitest → playwright)
 
 ## Hardware Context
 - **GPU:** AMD 6650XT (8GB)
@@ -102,5 +104,23 @@
 - [x] Add 6 unit tests for the endpoint.
 - [x] **Test:** New chat → send message → AI responds → sidebar title updates from "New Chat" to a descriptive label.
 
+### Phase 10: Document RAG & Multimodal
+**Goal:** Project-scoped document upload with retrieval-augmented generation and image input.
+- [x] Document upload pipeline (PDF, DOCX, TXT, MD, CSV, code files).
+- [x] Sentence-aware chunking (2000 chars, 400 overlap) with embedding.
+- [x] Five-layer context: system prompt → document chunks → semantic retrieval → summary → recent messages.
+- [x] Multimodal image input via clipboard paste, drag-and-drop, or file picker.
+- [x] Image persistence in `message_attachments` table.
+- [x] **Test:** Upload documents, verify RAG retrieval, send images in chat.
+
+### Phase 11: Cloud Deployment & CI
+**Goal:** Production deployment with continuous integration.
+- [x] Deploy to Vercel with Turso remote database.
+- [x] Migrate from `better-sqlite3` to `@libsql/client` for serverless compatibility.
+- [x] Add Alibaba Cloud Qwen (DashScope) as third AI provider.
+- [x] GitHub Actions CI pipeline (lint, build, vitest, playwright).
+- [x] Vercel CLI setup for direct deployments.
+- [x] **Test:** All 105 Vitest + 8 Playwright tests pass in CI.
+
 ## Status
-All planned phases complete. Ready for production use.
+All planned phases complete. Production deployed at [atelier-ai.vercel.app](https://atelier-ai.vercel.app).
